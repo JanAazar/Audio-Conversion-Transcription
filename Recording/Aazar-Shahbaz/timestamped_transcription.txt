@@ -1,0 +1,10 @@
+[3.600,4.400]	Speaker 1	hello
+[6.160,8.480]	Speaker 2	hey good morning sam how are you doing
+[8.720,10.960]	Speaker 1	very good very good how are you azir
+[11.440,13.280]	Speaker 2	i'm doing great how do you
+[13.280,25.255]	Speaker 1	feel about the investor meeting that you had it's amazing man i'm i'm i'm genuinely shocked this is such a good idea that we have came across with and i think we we we can really do this
+[25.735,37.950]	Speaker 2	did you hear that marco said it's a 0.5 modality i mean these investors are so happy working with things that are not hard and somebody told me that i've been sold like a bitch
+[38.430,51.015]	Speaker 1	oh man you you really all sold because like i mean look at you man you know you were you were you were talking about space and now you're looking hiring people like labor like a labor job
+[51.335,54.535]	Speaker 2	oh man this is what meant to do anyways okay
+[54.695,55.175]	Speaker 1	let me it
+[55.175,56.935]	Speaker 2	was nice you can stop the recording now
