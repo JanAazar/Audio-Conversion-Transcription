@@ -145,14 +145,20 @@ def transcribe_audio(audio_path, output_file):
         # Create Deepgram client with API key
         deepgram = DeepgramClient(api_key=api_key)
         
-        # Transcribe with diarization
+        # Transcribe with diarization, sentiment, topics, and summary
         with open(audio_path, "rb") as audio_file:
             response = deepgram.listen.v1.media.transcribe_file(
                 request=audio_file.read(),
                 model="nova-3",
+                language="en",
+                summarize="v2",
+                topics=True,
+                intents=True,
+                sentiment=True,
                 smart_format=True,
                 paragraphs=True,
                 diarize=True,
+                filler_words=True,
             )
         
         # Convert response to dict
@@ -216,12 +222,18 @@ def transcribe_audio(audio_path, output_file):
                                         end = sentence.get('end', 0)
                                         transcript = sentence.get('text', '').strip()
                                         
+                                        # Get sentiment if available
+                                        sentiment = sentence.get('sentiment', 'neutral')
+                                        sentiment_score = sentence.get('sentiment_score', 0.0)
+                                        
                                         if transcript:
                                             utterances.append({
                                                 'start': start,
                                                 'end': end,
                                                 'speaker': f'Speaker {int(speaker_id) + 1}',
-                                                'transcript': transcript
+                                                'transcript': transcript,
+                                                'sentiment': sentiment,
+                                                'sentiment_score': sentiment_score
                                             })
         
         # Sort by start time
@@ -230,18 +242,37 @@ def transcribe_audio(audio_path, output_file):
         # Save to file
         with open(output_file, "w", encoding="utf-8") as f:
             for utt in utterances:
-                line = f"[{utt['start']:.3f},{utt['end']:.3f}]\t{utt['speaker']}\t{utt['transcript']}\n"
+                # Format: [start,end]  SPEAKER_ID  SENTIMENT (score)  transcript
+                sentiment_info = f"{utt.get('sentiment', 'neutral')} ({utt.get('sentiment_score', 0.0):.2f})"
+                line = f"[{utt['start']:.3f},{utt['end']:.3f}]\t{utt['speaker']}\t{sentiment_info}\t{utt['transcript']}\n"
                 f.write(line)
+        
+        # Extract summary if available
+        summary_text = None
+        if 'results' in response_json and 'summary' in response_json['results']:
+            summary = response_json['results']['summary']
+            if summary and 'short' in summary:
+                summary_text = summary['short']
+                
+                # Save summary to separate file
+                summary_file = output_file.replace('timestamped_transcription.txt', 'summary.txt')
+                with open(summary_file, 'w', encoding='utf-8') as f:
+                    f.write(summary_text)
+                
+                st.write(f"✅ Summary saved to: {summary_file}")
         
         speakers = set(utt['speaker'] for utt in utterances)
         return {
             'utterances': utterances,
             'speakers': speakers,
-            'count': len(utterances)
+            'count': len(utterances),
+            'summary': summary_text
         }
         
     except Exception as e:
         st.error(f"❌ Transcription failed: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 # Process audio when button is clicked
@@ -323,21 +354,35 @@ if merge_button:
                     if transcript_result:
                         st.success(f"✅ Transcription completed!")
                         
-                        col1, col2 = st.columns(2)
+                        col1, col2, col3 = st.columns(3)
                         with col1:
                             st.metric("Total Utterances", transcript_result['count'])
                         with col2:
                             st.metric("Speakers Detected", len(transcript_result['speakers']))
+                        with col3:
+                            if transcript_result.get('summary'):
+                                st.metric("Summary", "✅ Generated")
                         
                         st.markdown(f"**📝 Transcription saved to:** `{transcript_file}`")
+                        if transcript_result.get('summary'):
+                            summary_file = transcript_file.replace('timestamped_transcription.txt', 'summary.txt')
+                            st.markdown(f"**📄 Summary saved to:** `{summary_file}`")
                         
-                        # Show preview
+                        # Show preview with sentiment
                         st.markdown("**Preview:**")
                         preview_text = ""
                         for i, utt in enumerate(transcript_result['utterances'][:5]):
-                            preview_text += f"[{utt['start']:.1f}s] {utt['speaker']}: {utt['transcript'][:50]}...\n"
+                            sentiment = utt.get('sentiment', 'neutral')
+                            sentiment_score = utt.get('sentiment_score', 0.0)
+                            emoji = "😊" if sentiment == "positive" else "😐" if sentiment == "neutral" else "😞"
+                            preview_text += f"[{utt['start']:.1f}s] {utt['speaker']} {emoji} {sentiment}({sentiment_score:.2f}): {utt['transcript'][:40]}...\n"
                         
                         st.text(preview_text)
+                        
+                        # Show summary if available
+                        if transcript_result.get('summary'):
+                            with st.expander("📄 Conversation Summary"):
+                                st.write(transcript_result['summary'])
                 else:
                     st.warning("⚠️ DEEPGRAM_API_KEY not set. Transcription skipped.")
             
