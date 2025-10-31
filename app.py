@@ -8,9 +8,41 @@ import tempfile
 from pathlib import Path
 from deepgram import DeepgramClient
 from dotenv import load_dotenv
+from audiomentations import AddBackgroundNoise
+import glob
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Initialize noise samples if they don't exist
+def setup_noise_samples(noise_dir="noise_samples"):
+    """Create noise samples if they don't exist."""
+    if os.path.exists(noise_dir) and len(os.listdir(noise_dir)) > 0:
+        return noise_dir
+    
+    # Only create default samples if the directory doesn't exist or is empty
+    os.makedirs(noise_dir, exist_ok=True)
+    
+    sample_rate = 48000
+    duration = 10
+    
+    noise_types = {
+        'white_noise.wav': lambda: np.random.randn(int(sample_rate * duration)),
+        'pink_noise.wav': lambda: np.random.randn(int(sample_rate * duration)) * np.sqrt(np.arange(1, int(sample_rate * duration) + 1)),
+        'brown_noise.wav': lambda: np.cumsum(np.random.randn(int(sample_rate * duration))),
+        'cafe_ambience.wav': lambda: np.random.randn(int(sample_rate * duration)) * 0.3,
+        'office_noise.wav': lambda: np.random.randn(int(sample_rate * duration)) * 0.4,
+    }
+    
+    for filename, noise_generator in noise_types.items():
+        filepath = os.path.join(noise_dir, filename)
+        # Only create if file doesn't already exist
+        if not os.path.exists(filepath):
+            noise = noise_generator()
+            noise = noise / np.max(np.abs(noise)) * 0.8
+            sf.write(filepath, noise, sample_rate)
+    
+    return noise_dir
 
 st.set_page_config(page_title="Audio Merger", page_icon="🎙️", layout="wide")
 
@@ -31,6 +63,16 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("**Configuration**")
     enable_transcription = st.checkbox("Enable transcription (requires DEEPGRAM_API_KEY)", value=True)
+    enable_noise = st.checkbox("Add background noise", value=False)
+    
+    # Noise settings
+    if enable_noise:
+        st.markdown("**Noise Settings:**")
+        st.markdown("*💡 Tip: Lower values = quieter/more subtle background noise*")
+        min_snr = st.slider("Minimum Volume (dB)", -30.0, 15.0, -5.0, 0.5, help="Lower = more quiet/more subtle")
+        max_snr = st.slider("Maximum Volume (dB)", -10.0, 30.0, 10.0, 0.5, help="Higher = more loud/more prominent")
+    else:
+        min_snr, max_snr = -5.0, 10.0
 
 # File uploaders
 col1, col2 = st.columns(2)
@@ -46,6 +88,28 @@ with col2:
 # Folder name input
 st.markdown("---")
 folder_name = st.text_input("Enter folder name for this recording:", placeholder="e.g., Meeting_2024_10_29")
+
+# Background noise selection (only show if enabled)
+noise_file = None
+if enable_noise:
+    st.markdown("---")
+    # Setup noise samples
+    noise_dir = setup_noise_samples()
+    
+    # Get list of available noise files
+    noise_files = sorted(glob.glob(os.path.join(noise_dir, "*.wav")))
+    noise_options = [os.path.basename(f) for f in noise_files]
+    
+    if noise_options:
+        st.markdown("**Choose Background Noise:**")
+        selected_noise = st.selectbox(
+            "Select a noise type",
+            noise_options,
+            help="Choose the type of background noise to add to your conversation"
+        )
+        noise_file = os.path.join(noise_dir, selected_noise)
+    else:
+        st.warning("⚠️ No noise samples available")
 
 # Merge button
 merge_button = st.button("🎵 Merge Audio", type="primary", use_container_width=True)
@@ -65,6 +129,38 @@ def convert_to_mono(audio_file, target_sr=48000):
         audio_data = np.mean(audio_data, axis=0)
     
     return audio_data, sample_rate
+
+def add_noise_to_audio_streamlit(input_file, output_file, noise_file, min_snr_db=5.0, max_snr_db=25.0):
+    """Add background noise to audio file (for Streamlit)."""
+    # Load the audio file (preserve stereo)
+    audio_data, sample_rate = librosa.load(input_file, sr=None, mono=False)
+    
+    # Create noise augmentation transform with specific noise file
+    # sounds_path can be a single file path - that way it will use that exact file
+    transform = AddBackgroundNoise(
+        sounds_path=noise_file,  # Use the specific file directly
+        min_snr_db=min_snr_db,
+        max_snr_db=max_snr_db,
+        p=1.0
+    )
+    
+    # Apply the transformation
+    if len(audio_data.shape) > 1 and audio_data.shape[0] > 1:
+        # Stereo audio - process each channel separately
+        left_channel = transform(audio_data[0], sample_rate=sample_rate)
+        right_channel = transform(audio_data[1], sample_rate=sample_rate)
+        augmented_audio = np.array([left_channel, right_channel])
+    else:
+        # Mono audio
+        if len(audio_data.shape) > 1:
+            audio_data = audio_data[0]
+        augmented_audio = transform(audio_data, sample_rate=sample_rate)
+    
+    # Save the augmented audio
+    if len(augmented_audio.shape) == 1:
+        sf.write(output_file, augmented_audio, sample_rate)
+    else:
+        sf.write(output_file, augmented_audio.T, sample_rate)
 
 def process_audio(first_file, second_file, folder_name):
     """Process and merge two audio files."""
@@ -132,6 +228,15 @@ def process_audio(first_file, second_file, folder_name):
         'sample_rate': sample_rate,
         'output_folder': output_folder
     }
+
+def add_noise_to_conversation(conversation_path, output_folder, noise_file, min_snr=5.0, max_snr=25.0):
+    """Add background noise to conversation audio."""
+    noisy_conversation_path = os.path.join(output_folder, "conversation_noisy.wav")
+    
+    st.info(f"🔊 Adding background noise (Volume: {min_snr:.1f} to {max_snr:.1f} dB)...")
+    add_noise_to_audio_streamlit(conversation_path, noisy_conversation_path, noise_file, min_snr, max_snr)
+    
+    return noisy_conversation_path
 
 def transcribe_audio(audio_path, output_file):
     """Transcribe audio file with speaker diarization."""
@@ -300,36 +405,71 @@ if merge_button:
             os.unlink(tmp_first_path)
             os.unlink(tmp_second_path)
             
+            # Add noise if enabled
+            if enable_noise and noise_file:
+                result['conversation_noisy'] = add_noise_to_conversation(
+                    result['conversation'], 
+                    result['output_folder'], 
+                    noise_file,
+                    min_snr,
+                    max_snr
+                )
+            
             # Display success message
             st.success(f"✅ Audio files processed successfully!")
             
             # Display results
             st.markdown("### 📁 Output Files")
             
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.markdown("**First Speaker (Mono)**")
-                st.info(f"✓ {result['duration']:.2f}s @ {result['sample_rate']} Hz")
-            
-            with col2:
-                st.markdown("**Second Speaker (Mono)**")
-                st.info(f"✓ {result['duration']:.2f}s @ {result['sample_rate']} Hz")
-            
-            with col3:
-                st.markdown("**Conversation (Stereo)**")
-                st.success(f"✓ {result['duration']:.2f}s @ {result['sample_rate']} Hz")
+            if enable_noise and noise_file and 'conversation_noisy' in result:
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.markdown("**First Speaker**")
+                    st.info(f"✓ Mono")
+                
+                with col2:
+                    st.markdown("**Second Speaker**")
+                    st.info(f"✓ Mono")
+                
+                with col3:
+                    st.markdown("**Conversation**")
+                    st.success(f"✓ Stereo")
+                
+                with col4:
+                    st.markdown("**Conversation + Noise**")
+                    st.warning(f"✓ Created")
+            else:
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown("**First Speaker**")
+                    st.info(f"✓ Mono")
+                
+                with col2:
+                    st.markdown("**Second Speaker**")
+                    st.info(f"✓ Mono")
+                
+                with col3:
+                    st.markdown("**Conversation**")
+                    st.success(f"✓ Stereo")
             
             st.markdown(f"**📂 Files saved to:** `{result['output_folder']}/`")
             
             # Show file sizes
             st.markdown("### 📊 File Information")
             file_sizes = {}
-            for name, path in [
+            files_to_show = [
                 ('first_speaker.wav', result['first_mono']),
                 ('second_speaker.wav', result['second_mono']),
                 ('conversation.wav', result['conversation'])
-            ]:
+            ]
+            
+            # Add noisy version if it exists
+            if 'conversation_noisy' in result:
+                files_to_show.append(('conversation_noisy.wav', result['conversation_noisy']))
+            
+            for name, path in files_to_show:
                 size = os.path.getsize(path) / (1024 * 1024)
                 file_sizes[name] = size
             

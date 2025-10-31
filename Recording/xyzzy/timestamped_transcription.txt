@@ -19,6 +19,5 @@
 [51.335,52.215]	Speaker 2	neutral (-0.02)	Oh, man.
 [52.215,53.495]	Speaker 2	neutral (-0.02)	This is what meant to do.
 [53.495,54.535]	Speaker 2	neutral (0.05)	Anyways Okay.
-[54.695,55.175]	Speaker 1	neutral (0.09)	Let me It
-[55.175,55.655]	Speaker 2	neutral (0.30)	was nice.
+[54.695,55.655]	Speaker 2	neutral (0.17)	Let me It was nice.
 [55.655,56.935]	Speaker 2	neutral (0.05)	You can stop the recording now.

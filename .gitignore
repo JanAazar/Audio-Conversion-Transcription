@@ -29,6 +29,9 @@ Thumbs.db
 *.m4a
 *.mp4
 
+# Noise samples directory
+noise_samples/
+
 # Recording output folder (optional)
 # Recording/
 
