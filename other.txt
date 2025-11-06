@@ -1,0 +1,21 @@
+# topics_detected = transcript["topics"]
+        # topic_segments = topics_detected["segments"]
+        # topic_summary = topics_detected["summary"]["overall"]
+        # print(summary)
+        # print(topic_summary)
+        # for segment in topic_segments:
+        #     print(
+        #         f"({segment['start_time']} - {segment['end_time']}): {segment['text']} ({[t['topic'] for t in segment['topics']]})"
+        #     )
+        
+        # chapters = transcript["chapters"]
+        # for chapter in chapters:
+        #     print(
+        #         f"({chapter['start_time']} - {chapter['end_time']}) {chapter['title']}\n{chapter['summary']}\n\n"
+        #     )
+
+        #print(transcript)
+
+
+
+        ok now I need to combine the "Transcribe the final conversion" button with the "create final transcript" button. The new button should be "trascribe conversation" and it would perform the functions of the two buttons in the sequence. 
