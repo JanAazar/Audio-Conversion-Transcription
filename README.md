@@ -1,6 +1,6 @@
 # Audio Conversation Merger
 
-A Streamlit app for merging two audio files into a stereo conversation file.
+A Streamlit app for merging two audio files into a stereo conversation file, with integrated Hume API for emotion analysis and Speechmatics for transcription.
 
 ## Features
 
@@ -9,6 +9,8 @@ A Streamlit app for merging two audio files into a stereo conversation file.
 - 🎵 Creates stereo output with speakers on separate channels
 - 📁 Organizes outputs in custom subfolders
 - ⚡ Automatic sample rate alignment and duration matching
+- 🧠 Hume API integration for emotion analysis (see `test_hume.py`)
+- 🎤 Speechmatics integration for speech-to-text transcription
 
 ## Installation
 
@@ -59,6 +61,26 @@ After merging, three files are created in your specified folder:
   - Stereo output: Left = First Speaker, Right = Second Speaker
 - **Duration Alignment**: Automatically pads shorter audio with silence to match durations
 
+## API Integration
+
+### Hume API (Emotion Analysis)
+
+The project includes integration with Hume's emotion analysis API via `test_hume.py`. This script uses the Prosody model to analyze audio and extract emotions from speech.
+
+**Important Note**: The current version of the hume SDK (v0.13.1) has bugs that have been patched in the installed package. If you reinstall or upgrade the hume package, you'll need to reapply these patches:
+
+1. In `venv/lib/python3.13/site-packages/hume/expression_measurement/client.py`, change line 36 to import from `client_with_utils` instead of `client`
+2. In `venv/lib/python3.13/site-packages/hume/expression_measurement/batch/client_with_utils.py`, add `base_url` parameter to the request calls
+
+To use the Hume API:
+```bash
+python test_hume.py
+```
+
+### Speechmatics (Transcription)
+
+See `test_speechmatics.py` for example usage of the Speechmatics batch transcription API.
+
 ## Requirements
 
 - Python 3.7+
@@ -66,4 +88,6 @@ After merging, three files are created in your specified folder:
 - librosa
 - soundfile
 - numpy
+- hume (for emotion analysis)
+- speechmatics-python (for transcription)
 

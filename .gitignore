@@ -32,6 +32,6 @@ Thumbs.db
 # Noise samples directory
 noise_samples/
 
-# Recording output folder (optional)
-# Recording/
+# Recording output folder
+Recording/
 
