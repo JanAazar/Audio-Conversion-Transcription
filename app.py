@@ -13,9 +13,9 @@ from pathlib import Path
 from datetime import datetime
 from deepgram import DeepgramClient
 from dotenv import load_dotenv
+from httpx import HTTPStatusError
 #from speechmatics.models import ConnectionSettings
 #from speechmatics.batch_client import BatchClient
-from httpx import HTTPStatusError
 #from hume import AsyncHumeClient
 #from hume.expression_measurement.batch import Face, Prosody, Models
 #from hume.expression_measurement.batch.types import InferenceBaseRequest
@@ -1282,7 +1282,7 @@ if st.session_state.current_page == 'annotation':
                         <button onclick="playAudio()">▶ Play</button>
                         <button onclick="pauseAudio()">⏸ Pause</button>
                         <button onclick="goBack5Seconds()">⏪ Go Back 5s</button>
-                        <button id="speedButton" onclick="togglePlaybackSpeed()">0.75x Speed</button>
+                        <button id="speedButton" onclick="togglePlaybackSpeed()">1.0x Speed</button>
                         <button id="resumeButton" onclick="resumeAudio()" class="resume-button" style="display: none;">▶ Resume</button>
                     </div>
                 </div>
@@ -1346,20 +1346,20 @@ if st.session_state.current_page == 'annotation':
                     let editedEntries = {{}}; // Store edited entries by index
                     let editedEmotions = {{}}; // Store edited emotions by index
                     let wasPlayingBeforeEdit = false;
-                    let playbackSpeed = 0.75; // Track current playback speed (default 0.75x)
+                    let playbackSpeed = 1.0; // Track current playback speed (default 1.0x)
                     let currentEmotionEntryIndex = null; // Track which entry is having emotions edited
                     
                     // Available emotions
                     const availableEmotions = [
-                        'Admiration', 'Adoration', 'Aesthetic Appreciation', 'Amusement', 'Anger', 'Anxiety',
+                        'Admiration', 'Adoration', 'Amusement', 'Anger', 'Anxiety',
                         'Awe', 'Awkwardness', 'Boredom', 'Calmness', 'Concentration', 'Confusion',
-                        'Contemplation', 'Contempt', 'Contentment', 'Craving', 'Desire', 'Disappointment',
-                        'Disgust', 'Distress', 'Doubt', 'Ecstasy', 'Sadness'
+                        'Contemplation', 'Contempt', 'Contentment', 'Craving', 'Desire', 'Disappointment', 'Distress', 'Determination',
+                        'Disgust', 'Distress', 'Doubt', 'Ecstasy', 'Excitement', 'Fear','Joy', 'Sadness', 'Surprise'
                     ];
                     
-                    // Set default playback speed to 0.75x
-                    audio.playbackRate = 0.75;
-                    document.getElementById('speedButton').textContent = '0.75x Speed';
+                    // Set default playback speed to 1.0x
+                    audio.playbackRate = 1.0;
+                    document.getElementById('speedButton').textContent = '1.0x Speed';
                     
                     // Initialize emotion modal options
                     function initializeEmotionModal() {{
@@ -1844,7 +1844,7 @@ if st.session_state.current_page == 'annotation':
                     }}
                     
                     function togglePlaybackSpeed() {{
-                        // Toggle between 0.75x (default) and 1.0x speed
+                        // Toggle between 1.0x (default) and 0.75x speed
                         if (playbackSpeed === 0.75) {{
                             playbackSpeed = 1.0;
                             audio.playbackRate = 1.0;
