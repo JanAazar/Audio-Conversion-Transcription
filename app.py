@@ -16,9 +16,9 @@ from dotenv import load_dotenv
 #from speechmatics.models import ConnectionSettings
 #from speechmatics.batch_client import BatchClient
 from httpx import HTTPStatusError
-from hume import AsyncHumeClient
-from hume.expression_measurement.batch import Face, Prosody, Models
-from hume.expression_measurement.batch.types import InferenceBaseRequest
+#from hume import AsyncHumeClient
+#from hume.expression_measurement.batch import Face, Prosody, Models
+#from hume.expression_measurement.batch.types import InferenceBaseRequest
 from openai import OpenAI
 
 # Load environment variables from .env file
