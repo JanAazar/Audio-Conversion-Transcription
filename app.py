@@ -13,8 +13,8 @@ from pathlib import Path
 from datetime import datetime
 from deepgram import DeepgramClient
 from dotenv import load_dotenv
-from speechmatics.models import ConnectionSettings
-from speechmatics.batch_client import BatchClient
+#from speechmatics.models import ConnectionSettings
+#from speechmatics.batch_client import BatchClient
 from httpx import HTTPStatusError
 from hume import AsyncHumeClient
 from hume.expression_measurement.batch import Face, Prosody, Models
