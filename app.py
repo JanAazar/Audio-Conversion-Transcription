@@ -19,7 +19,7 @@ from httpx import HTTPStatusError
 #from hume import AsyncHumeClient
 #from hume.expression_measurement.batch import Face, Prosody, Models
 #from hume.expression_measurement.batch.types import InferenceBaseRequest
-from openai import OpenAI
+#from openai import OpenAI
 
 # Load environment variables from .env file
 load_dotenv()
