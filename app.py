@@ -1354,7 +1354,7 @@ if st.session_state.current_page == 'annotation':
                         'Admiration', 'Adoration', 'Amusement', 'Anger', 'Anxiety',
                         'Awe', 'Awkwardness', 'Boredom', 'Calmness', 'Concentration', 'Confusion',
                         'Contemplation', 'Contempt', 'Contentment', 'Craving', 'Desire', 'Disappointment', 'Distress', 'Determination',
-                        'Disgust', 'Distress', 'Doubt', 'Ecstasy', 'Excitement', 'Fear','Joy', 'Sadness', 'Surprise'
+                        'Disgust', 'Distress', 'Doubt', 'Ecstasy', 'Excitement', 'Fear','Joy', 'Nostalgia', 'Sadness', 'Surprise'
                     ];
                     
                     // Set default playback speed to 1.0x

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script to merge audio files for conversations 63-73.
+Script to merge audio files for a range of conversations.
 Converts .m4a files to mono and merges them into stereo conversation.wav.
 """
 
@@ -8,6 +8,7 @@ import os
 import soundfile as sf
 import librosa
 import numpy as np
+import sys
 from pathlib import Path
 
 def convert_to_mono(audio_file, target_sr=48000):
@@ -85,13 +86,33 @@ def process_audio(first_file, second_file, folder_path):
     
     return conversation_path
 
+def parse_range_args(default_start=63, default_end=73):
+    """Parse optional start and end arguments from command line."""
+    if len(sys.argv) == 1:
+        return default_start, default_end
+    if len(sys.argv) == 2:
+        try:
+            start = int(sys.argv[1])
+            return start, start
+        except ValueError:
+            raise ValueError("Start conversation number must be an integer")
+    if len(sys.argv) >= 3:
+        try:
+            start = int(sys.argv[1])
+            end = int(sys.argv[2])
+            if start > end:
+                raise ValueError("Start conversation number must be less than or equal to end number")
+            return start, end
+        except ValueError:
+            raise ValueError("Start and end conversation numbers must be integers")
+
+
 def main():
-    """Main function to process conversations 63-73."""
+    """Main function to process a range of conversations."""
     base_folder = "Recording"
     
-    # Process conversations 63 to 73
-    start_num = 63
-    end_num = 73
+    # Process conversations in provided range (defaults to 63-73)
+    start_num, end_num = parse_range_args()
     
     print(f"Merging conversations {start_num} to {end_num}...")
     print("=" * 60)
