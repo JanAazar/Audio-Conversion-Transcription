@@ -14,12 +14,12 @@ from datetime import datetime
 from deepgram import DeepgramClient
 from dotenv import load_dotenv
 from httpx import HTTPStatusError
-#from speechmatics.models import ConnectionSettings
-#from speechmatics.batch_client import BatchClient
-#from hume import AsyncHumeClient
-#from hume.expression_measurement.batch import Face, Prosody, Models
-#from hume.expression_measurement.batch.types import InferenceBaseRequest
-#from openai import OpenAI
+# from speechmatics.models import ConnectionSettings
+# from speechmatics.batch_client import BatchClient
+# from hume import AsyncHumeClient
+# from hume.expression_measurement.batch import Face, Prosody, Models
+# from hume.expression_measurement.batch.types import InferenceBaseRequest
+# from openai import OpenAI
 
 # Load environment variables from .env file
 load_dotenv()
@@ -757,6 +757,8 @@ Now produce the final merged transcript.
 - Do NOT use asterisks (*) or double asterisks (**).
 - Simply write plain text like:
   [9.280,11.120] Speaker 1: Hello there. (Emotion: Sadness, Surprise)
+
+- timestamps should be in the format [start,end] not [HH:MM:SS.mmm]
 
 
 Now produce the final merged transcript.

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Script to create final_transcript.txt for conversations 3-10
-by merging deepgram_transcript.txt (or timestamped_transcription.txt) with hume_emotion.txt
+Script to create final_transcript.txt for conversations
+by merging deepgram_transcript.txt with hume_emotion.txt
 """
 
+import argparse
 import os
 import json
 from pathlib import Path
@@ -71,6 +72,8 @@ Now produce the final merged transcript.
   [9.280,11.120] Speaker 1: Hello there. (Emotion: Sadness, Surprise)
 
 
+- timestamps should be in the format [start,end] not [HH:MM:SS.mmm]
+
 Now produce the final merged transcript.
 """
         
@@ -127,25 +130,59 @@ def format_deepgram_transcript(timestamped_file):
     return formatted_deepgram
 
 def main():
-    """Main function to create final transcripts for conversations 3-10."""
-    base_folder = "Recording"
+    """Main function to create final transcripts for a set of conversations."""
+    parser = argparse.ArgumentParser(description="Create merged final transcripts for conversations.")
+    parser.add_argument(
+        "--base-folder",
+        default="Recording",
+        help="Base folder containing conversation subdirectories (default: Recording)",
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--range",
+        nargs=2,
+        type=int,
+        metavar=("START", "END"),
+        help="Inclusive range of conversation numbers to process (e.g., --range 3 10)",
+    )
+    group.add_argument(
+        "--conversations",
+        nargs="+",
+        type=int,
+        help="Explicit list of conversation numbers to process (e.g., --conversations 12 13 15)",
+    )
+    args = parser.parse_args()
     
-    # Process conversations 3 to 10
-    start_num = 3
-    end_num = 10
+    base_folder = args.base_folder
     
-    print(f"Creating final transcripts for conversations {start_num} to {end_num}...")
+    if args.conversations:
+        conversation_numbers = sorted(set(args.conversations))
+        conversations_label = ", ".join(map(str, conversation_numbers))
+    else:
+        if args.range:
+            start_num, end_num = args.range
+            if start_num > end_num:
+                start_num, end_num = end_num, start_num
+        else:
+            start_num, end_num = 3, 10
+        
+        conversation_numbers = list(range(start_num, end_num + 1))
+        conversations_label = f"{conversation_numbers[0]} to {conversation_numbers[-1]}"
+    
+    print(f"Creating final transcripts for conversations {conversations_label}...")
     print("=" * 60)
     
     successful = 0
     skipped = 0
     failed = 0
     
-    for conv_num in range(start_num, end_num + 1):
+    total = len(conversation_numbers)
+    
+    for index, conv_num in enumerate(conversation_numbers, start=1):
         folder_name = f"Conversation_{conv_num}"
         folder_path = os.path.join(base_folder, folder_name)
         
-        print(f"\n[{conv_num}/{end_num}] Processing {folder_name}...")
+        print(f"\n[{index}/{total}] Processing {folder_name}...")
         
         if not os.path.exists(folder_path):
             print(f"  ⚠️  Folder does not exist, skipping")

@@ -94,8 +94,7 @@ with BatchClient(settings) as client:
             content = item.get("content", "")
             start_time = item.get("start", 0)
             end_time = item.get("end", 0)
-            
-            
+                
             # Check if this is a new utterance (new speaker)
             if current_utterance is None or speaker != current_utterance.get("speaker"):
                 # Print previous utterance if exists

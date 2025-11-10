@@ -48,4 +48,3 @@ def get_total_audio_duration():
 
 if __name__ == "__main__":
     get_total_audio_duration()
-
