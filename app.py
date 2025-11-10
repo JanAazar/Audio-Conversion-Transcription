@@ -859,7 +859,7 @@ if st.session_state.current_page == 'annotation':
                 timestamp_format = 'time_format'
             else:
                 # Try new format: [start,end]
-                timestamp_match = re.search(r'\[([\d.]+),([\d.]+)\]', line)
+                timestamp_match = re.search(r'\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]', line)
                 if timestamp_match:
                     # Use the start time (first number) as the timestamp
                     total_seconds = float(timestamp_match.group(1))
