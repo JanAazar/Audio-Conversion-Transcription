@@ -11,7 +11,7 @@ import base64
 from datetime import datetime
 from deepgram import DeepgramClient
 from dotenv import load_dotenv
-from httpx import HTTPStatusError
+# from httpx import HTTPStatusError
 # from speechmatics.models import ConnectionSettings
 # from speechmatics.batch_client import BatchClient
 # from hume import AsyncHumeClient
@@ -896,6 +896,14 @@ if st.session_state.current_page == 'annotation':
                 continue
             
             text_part = line[text_start + 1:].strip()
+            # Extract intensity if present (format: [Intensity: X] or Intensity: X)
+            intensity = 3  # Default intensity
+            intensity_match = re.search(r'\[Intensity:\s*(\d+)\]|Intensity:\s*(\d+)', text_part, re.IGNORECASE)
+            if intensity_match:
+                intensity = int(intensity_match.group(1) or intensity_match.group(2))
+                # Remove intensity from text_part
+                text_part = re.sub(r'\[Intensity:\s*\d+\]|Intensity:\s*\d+', '', text_part, flags=re.IGNORECASE).strip()
+            
             # Extract emotion part if present
             emotion_match = re.search(r'\s*\(Emotion:.*?\)\s*$', text_part)
             emotion_part = ""
@@ -920,6 +928,7 @@ if st.session_state.current_page == 'annotation':
                 'text': text_part,
                 'emotion': emotion_part,
                 'emotions': emotions_list,  # Store as array for easier manipulation
+                'intensity': intensity,  # Store intensity (default 3)
                 'original_line': original_line,
                 'index': len(transcript_entries)  # Store index for matching with original lines
             })
@@ -1285,6 +1294,44 @@ if st.session_state.current_page == 'annotation':
                     .emotion-modal-btn-secondary:hover {{
                         background-color: #777;
                     }}
+                    .intensity-container {{
+                        display: flex;
+                        align-items: center;
+                        gap: 4px;
+                        margin-left: 8px;
+                    }}
+                    .intensity-label {{
+                        font-size: 12px;
+                        color: #aaa;
+                        margin-right: 4px;
+                    }}
+                    .intensity-button {{
+                        width: 28px;
+                        height: 28px;
+                        border-radius: 50%;
+                        border: 2px solid #666;
+                        background-color: #2a2a2a;
+                        color: #fafafa;
+                        font-size: 14px;
+                        font-weight: bold;
+                        cursor: pointer;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        transition: all 0.2s ease;
+                        padding: 0;
+                        min-width: 28px;
+                    }}
+                    .intensity-button:hover {{
+                        border-color: #ff4b4b;
+                        background-color: #3a3a3a;
+                        transform: scale(1.1);
+                    }}
+                    .intensity-button.selected {{
+                        background-color: #ff4b4b;
+                        border-color: #ff4b4b;
+                        color: white;
+                    }}
                     @keyframes fadeIn {{
                         from {{ opacity: 0; transform: translateY(10px); }}
                         to {{ opacity: 1; transform: translateY(0); }}
@@ -1364,6 +1411,7 @@ if st.session_state.current_page == 'annotation':
                     let isEditing = false;
                     let editedEntries = {{}}; // Store edited entries by index
                     let editedEmotions = {{}}; // Store edited emotions by index
+                    let editedIntensities = {{}}; // Store edited intensities by index
                     let wasPlayingBeforeEdit = false;
                     let playbackSpeed = 1.0; // Track current playback speed (default 1.0x)
                     let currentEmotionEntryIndex = null; // Track which entry is having emotions edited
@@ -1653,9 +1701,39 @@ if st.session_state.current_page == 'annotation':
                                 }});
                                 emotionsContainer.appendChild(addEmotionBtn);
                                 
+                                // Create intensity container
+                                const intensityContainer = document.createElement('div');
+                                intensityContainer.className = 'intensity-container';
+                                // Prevent clicks on intensity container from triggering text editing
+                                intensityContainer.addEventListener('click', function(e) {{
+                                    e.stopPropagation();
+                                }});
+                                
+                                // Get intensity for this entry (use edited if available, otherwise original)
+                                let entryIntensity = editedIntensities[i];
+                                if (entryIntensity === undefined) {{
+                                    entryIntensity = entry.intensity !== undefined ? entry.intensity : 3;
+                                }}
+                                
+                                // Create intensity buttons (1-5)
+                                for (let intensity = 1; intensity <= 5; intensity++) {{
+                                    const intensityBtn = document.createElement('button');
+                                    intensityBtn.className = 'intensity-button' + (entryIntensity === intensity ? ' selected' : '');
+                                    intensityBtn.textContent = intensity;
+                                    intensityBtn.type = 'button';
+                                    intensityBtn.setAttribute('data-intensity', intensity);
+                                    intensityBtn.addEventListener('click', function(e) {{
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setIntensity(i, intensity);
+                                    }});
+                                    intensityContainer.appendChild(intensityBtn);
+                                }}
+                                
                                 // Assemble the line
                                 contentDiv.appendChild(textPart);
                                 contentDiv.appendChild(emotionsContainer);
+                                contentDiv.appendChild(intensityContainer);
                                 lineDiv.appendChild(contentDiv);
                                 
                                 transcriptLinesContainer.appendChild(lineDiv);
@@ -1805,6 +1883,16 @@ if st.session_state.current_page == 'annotation':
                         updateTranscript(true);
                     }}
                     
+                    function setIntensity(entryIndex, intensity) {{
+                        console.log('Setting intensity:', intensity, 'for entry:', entryIndex);
+                        
+                        // Save intensity
+                        editedIntensities[entryIndex] = intensity;
+                        
+                        // Force update display immediately
+                        updateTranscript(true);
+                    }}
+                    
                     
                     function resumeAudio() {{
                         isEditing = false;
@@ -1897,6 +1985,12 @@ if st.session_state.current_page == 'annotation':
                                 entryEmotions = entry.emotions || [];
                             }}
                             
+                            // Get intensity (use edited if available, otherwise original, default 3)
+                            let entryIntensity = editedIntensities[i];
+                            if (entryIntensity === undefined) {{
+                                entryIntensity = entry.intensity !== undefined ? entry.intensity : 3;
+                            }}
+                            
                             // Reconstruct the line in original format
                             let timestamp;
                             if (entry.timestamp_format === 'range_format') {{
@@ -1907,13 +2001,16 @@ if st.session_state.current_page == 'annotation':
                                 timestamp = formatTimeForLine(entry.time);
                             }}
                             
+                            // Format intensity as [Intensity: X]
+                            let intensityPart = ` [Intensity: ${{entryIntensity}}]`;
+                            
                             // Format emotions as (Emotion: Emotion1, Emotion2) or empty string
                             let emotionPart = '';
                             if (entryEmotions.length > 0) {{
                                 emotionPart = ' (Emotion: ' + entryEmotions.join(', ') + ')';
                             }}
                             
-                            const line = `[${{timestamp}}] ${{entry.speaker}}: ${{editedText}}${{emotionPart}}`;
+                            const line = `[${{timestamp}}] ${{entry.speaker}}: ${{editedText}}${{intensityPart}}${{emotionPart}}`;
                             
                             editedLines.push(line);
                         }}
