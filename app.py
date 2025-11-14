@@ -11,6 +11,8 @@ import base64
 from datetime import datetime
 from deepgram import DeepgramClient
 from dotenv import load_dotenv
+import time
+from datetime import datetime
 # from httpx import HTTPStatusError
 # from speechmatics.models import ConnectionSettings
 # from speechmatics.batch_client import BatchClient
