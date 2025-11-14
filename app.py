@@ -7,9 +7,7 @@ import json
 import tempfile
 import asyncio
 import re
-import time
 import base64
-from pathlib import Path
 from datetime import datetime
 from deepgram import DeepgramClient
 from dotenv import load_dotenv
@@ -50,11 +48,30 @@ def convert_to_mono(audio_file, target_sr=48000):
     """
     audio_data, sample_rate = librosa.load(audio_file, sr=target_sr, mono=False)
     
-    # Convert to mono if stereo
-    if len(audio_data.shape) > 1:
-        audio_data = np.mean(audio_data, axis=0)
+    if audio_data.ndim > 1:
+        # librosa returns (channels, samples)
+        channel_rms = np.sqrt(np.mean(audio_data**2, axis=1))
+        best_channel = int(np.argmax(channel_rms))
+        
+        averaged = np.mean(audio_data, axis=0)
+        averaged_rms = np.sqrt(np.mean(averaged**2))
+        best_rms = channel_rms[best_channel] if channel_rms.size else 0.0
+        
+        # If averaging cancels out the signal (e.g. phase-inverted channels) or one channel is effectively silent,
+        # prefer the strongest individual channel.
+        if best_rms > 0 and (averaged_rms < 0.1 * best_rms):
+            try:
+                st.warning(
+                    f"Detected unbalanced stereo in {os.path.basename(audio_file)}. "
+                    f"Using channel {best_channel + 1} only."
+                )
+            except Exception:
+                pass
+            audio_data = audio_data[best_channel]
+        else:
+            audio_data = averaged
     
-    return audio_data, sample_rate
+    return audio_data.astype(np.float32), sample_rate
 
 def process_audio(first_file, second_file, folder_name):
     """Process and merge two audio files."""
@@ -1353,12 +1370,20 @@ if st.session_state.current_page == 'annotation':
                     
                     // Available emotions
                     const availableEmotions = [
-                        'Admiration', 'Adoration', 'Amusement', 'Anger', 'Anxiety',
-                        'Awe', 'Awkwardness', 'Boredom', 'Calmness', 'Concentration', 'Confusion',
-                        'Contemplation', 'Contempt', 'Contentment', 'Craving', 'Desire', 'Disappointment', 'Distress', 'Determination',
-                        'Disgust', 'Distress', 'Doubt', 'Ecstasy', 'Embarrassment', 'Excitement', 'Fear', 'Interest', 'Joy', 'Nostalgia', 'Relief', 'Sadness', 'Surprise'
+                        'Joy', 'Sadness', 'Anger', 'Fear',
+                        'Surprise (Positive)', 'Surprise (Negative)', 'Disgust',
+                        'Interest', 'Confusion', 'Anxiety',
+                        'Calmness', 'Relief', 'Boredom',
+                        'Determination', 'Distress', 'Awkwardness',
+                        'Love', 'Pride', 'Satisfaction', 'Tiredness',
+                        'Contentment', 'Admiration', 'Trust',
+                        'Disapproval', 'Embarrassment', 'Contempt',
+                        'Amusement', 'Excitement', 'Wonder',
+                        'Awe', 'Realization', 'Concentration',
+                        'Contemplation', 'Craving', 'Desire',
+                        'Nostalgia', 'Adoration', 'Ecstasy'
                     ];
-                    
+       
                     // Set default playback speed to 1.0x
                     audio.playbackRate = 1.0;
                     document.getElementById('speedButton').textContent = '1.0x Speed';

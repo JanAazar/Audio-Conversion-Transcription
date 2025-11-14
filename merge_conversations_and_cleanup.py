@@ -21,11 +21,24 @@ def convert_to_mono(audio_file, target_sr=48000):
     """
     audio_data, sample_rate = librosa.load(audio_file, sr=target_sr, mono=False)
     
-    # Convert to mono if stereo
-    if len(audio_data.shape) > 1:
-        audio_data = np.mean(audio_data, axis=0)
+    if audio_data.ndim > 1:
+        channel_rms = np.sqrt(np.mean(audio_data**2, axis=1))
+        best_channel = int(np.argmax(channel_rms))
+        
+        averaged = np.mean(audio_data, axis=0)
+        averaged_rms = np.sqrt(np.mean(averaged**2))
+        best_rms = channel_rms[best_channel] if channel_rms.size else 0.0
+        
+        if best_rms > 0 and (averaged_rms < 0.1 * best_rms):
+            print(
+                f"    ⚠️  Detected unbalanced stereo in {os.path.basename(audio_file)}. "
+                f"Using channel {best_channel + 1} only."
+            )
+            audio_data = audio_data[best_channel]
+        else:
+            audio_data = averaged
     
-    return audio_data, sample_rate
+    return audio_data.astype(np.float32), sample_rate
 
 def process_audio(first_file, second_file, folder_path):
     """Process and merge two audio files (same as app.py process_audio function)."""
