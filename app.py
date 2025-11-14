@@ -12,7 +12,7 @@ from datetime import datetime
 from deepgram import DeepgramClient
 from dotenv import load_dotenv
 import time
-from datetime import datetime
+# from datetime import datetime
 # from httpx import HTTPStatusError
 # from speechmatics.models import ConnectionSettings
 # from speechmatics.batch_client import BatchClient
@@ -22,7 +22,7 @@ from datetime import datetime
 # from openai import OpenAI
 
 # Load environment variables from .env file
-load_dotenv()
+# load_dotenv()
 
 st.set_page_config(page_title="Annotation and Emotion Marking", page_icon="📝", layout="wide")
 
