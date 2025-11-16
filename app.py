@@ -13,7 +13,7 @@ from pathlib import Path
 from deepgram import DeepgramClient
 from dotenv import load_dotenv
 import time
-from httpx import HTTPStatusError
+# from httpx import HTTPStatusError
 # from speechmatics.models import ConnectionSettings
 # from speechmatics.batch_client import BatchClient
 # from hume import AsyncHumeClient
@@ -1415,28 +1415,26 @@ if st.session_state.current_page == 'annotation':
                     let editedEmotions = {{}}; // Store edited emotions by index
                     let editedIntensities = {{}}; // Store edited intensities by index
                     let wasPlayingBeforeEdit = false;
-                    let playbackSpeed = 1.0; // Track current playback speed (default 1.0x)
+                    let playbackSpeed = 0.75; // Track current playback speed (default 0.75x)
                     let currentEmotionEntryIndex = null; // Track which entry is having emotions edited
                     
                     // Available emotions
                     const availableEmotions = [
-                        'Joy', 'Sadness', 'Anger', 'Fear',
-                        'Surprise (Positive)', 'Surprise (Negative)', 'Disgust',
-                        'Interest', 'Confusion', 'Anxiety',
-                        'Calmness', 'Relief', 'Boredom',
-                        'Determination', 'Distress', 'Awkwardness',
-                        'Love', 'Pride', 'Satisfaction', 'Tiredness',
-                        'Contentment', 'Admiration', 'Trust',
-                        'Disapproval', 'Embarrassment', 'Contempt',
-                        'Amusement', 'Excitement', 'Wonder',
-                        'Awe', 'Realization', 'Concentration',
-                        'Contemplation', 'Craving', 'Desire',
-                        'Nostalgia', 'Adoration', 'Ecstasy'
+                        'Adoration', 'Admiration', 'Amusement', 'Anger',
+                        'Anxiety', 'Awe', 'Awkwardness', 'Boredom',
+                        'Calmness', 'Confusion', 'Concentration', 'Contempt',
+                        'Contentment', 'Contemplation', 'Craving', 'Desire',
+                        'Determination', 'Disappointment', 'Disapproval', 'Disgust',
+                        'Distress', 'Doubt', 'Ecstasy', 'Embarrassment',
+                        'Excitement', 'Fear', 'Interest', 'Joy',
+                        'Love', 'Nostalgia', 'Pride', 'Realization',
+                        'Relief', 'Sadness', 'Satisfaction', 'Surprise (Negative)',
+                        'Surprise (Positive)', 'Tiredness', 'Trust', 'Wonder'
                     ];
        
-                    // Set default playback speed to 1.0x
-                    audio.playbackRate = 1.0;
-                    document.getElementById('speedButton').textContent = '1.0x Speed';
+                    // Set default playback speed to 0.75x
+                    audio.playbackRate = 0.75;
+                    document.getElementById('speedButton').textContent = '0.75x Speed';
                     
                     // Initialize emotion modal options
                     function initializeEmotionModal() {{
