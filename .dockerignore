@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.env
+*.env
+
+# Streamlit/Local cache
+.streamlit/
+
+# Audio output folders
+Recording/
+outputs/
+logs/
+data/
+tmp/
+*.wav
+*.mp3
+*.m4a
+
+# OS files
+.DS_Store
+
+# Git
+.git/
+.gitignore

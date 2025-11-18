@@ -21,24 +21,17 @@ import time
 # from hume.expression_measurement.batch.types import InferenceBaseRequest
 # from openai import OpenAI
 
-# Load environment variables from .env file
 load_dotenv()
 
 st.set_page_config(page_title="Annotation and Emotion Marking", page_icon="📝", layout="wide")
 
-# Initialize session state for page navigation
 if 'current_page' not in st.session_state:
     st.session_state.current_page = 'annotation'
     
-# Initialize session state for password authentication
 if 'merging_page_authenticated' not in st.session_state:
     st.session_state.merging_page_authenticated = False
 if 'show_password_input' not in st.session_state:
     st.session_state.show_password_input = False
-
-# ============================================================================
-# Function Definitions
-# ============================================================================
 
 def convert_to_mono(audio_file, target_sr=48000):
     """
@@ -51,7 +44,6 @@ def convert_to_mono(audio_file, target_sr=48000):
     audio_data, sample_rate = librosa.load(audio_file, sr=target_sr, mono=False)
     
     if audio_data.ndim > 1:
-        # librosa returns (channels, samples)
         channel_rms = np.sqrt(np.mean(audio_data**2, axis=1))
         best_channel = int(np.argmax(channel_rms))
         
@@ -59,8 +51,6 @@ def convert_to_mono(audio_file, target_sr=48000):
         averaged_rms = np.sqrt(np.mean(averaged**2))
         best_rms = channel_rms[best_channel] if channel_rms.size else 0.0
         
-        # If averaging cancels out the signal (e.g. phase-inverted channels) or one channel is effectively silent,
-        # prefer the strongest individual channel.
         if best_rms > 0 and (averaged_rms < 0.1 * best_rms):
             try:
                 st.warning(
@@ -76,26 +66,20 @@ def convert_to_mono(audio_file, target_sr=48000):
     return audio_data.astype(np.float32), sample_rate
 
 def process_audio(first_file, second_file, folder_name):
-    """Process and merge two audio files."""
-    
-    # Create output directory structure
     base_folder = "Recording"
     output_folder = os.path.join(base_folder, folder_name)
     os.makedirs(output_folder, exist_ok=True)
     
-    # Convert both files to mono
     st.info("🔄 Converting files to mono...")
     first_data, first_sr = convert_to_mono(first_file)
     second_data, second_sr = convert_to_mono(second_file)
     
-    # Save mono files
     first_mono_path = os.path.join(output_folder, "first_speaker.wav")
     second_mono_path = os.path.join(output_folder, "second_speaker.wav")
     
     sf.write(first_mono_path, first_data, first_sr, format='WAV', subtype='PCM_16')
     sf.write(second_mono_path, second_data, second_sr, format='WAV', subtype='PCM_16')
     
-    # Ensure both are the same sample rate
     if first_sr != second_sr:
         st.info(f"🔄 Aligning sample rates ({first_sr} Hz vs {second_sr} Hz)...")
         if first_sr > second_sr:
@@ -115,7 +99,6 @@ def process_audio(first_file, second_file, folder_name):
     else:
         sample_rate = first_sr
     
-    # Ensure both are the same duration (pad shorter one with zeros)
     st.info("🔄 Aligning audio durations...")
     max_len = max(len(first_data), len(second_data))
     if len(first_data) < max_len:
@@ -123,15 +106,12 @@ def process_audio(first_file, second_file, folder_name):
     if len(second_data) < max_len:
         second_data = np.pad(second_data, (0, max_len - len(second_data)), 'constant')
     
-    # Combine into stereo
     st.info("🎵 Creating stereo output...")
     stereo = np.column_stack([first_data, second_data])
     
-    # Save conversation file
     conversation_path = os.path.join(output_folder, "conversation.wav")
     sf.write(conversation_path, stereo, sample_rate)
     
-    # Return file info
     duration = len(first_data) / sample_rate
     return {
         'first_mono': first_mono_path,
@@ -143,28 +123,20 @@ def process_audio(first_file, second_file, folder_name):
     }
 
 def split_stereo_conversation(stereo_file, folder_name):
-    """Split a stereo conversation file into two mono files (one per speaker)."""
-    
-    # Create output directory structure
     base_folder = "Recording"
     output_folder = os.path.join(base_folder, folder_name)
     os.makedirs(output_folder, exist_ok=True)
     
-    # Load stereo audio file
     st.info("🔄 Loading stereo audio file...")
     audio_data, sample_rate = librosa.load(stereo_file, sr=None, mono=False)
     
-    # Check if audio is actually stereo
     if len(audio_data.shape) == 1:
         st.error("❌ The uploaded file is mono, not stereo. Cannot split into separate speakers.")
         return None
     
-    # Extract left and right channels
-    # librosa returns (channels, samples), so left channel is audio_data[0], right is audio_data[1]
-    left_channel = audio_data[0]  # Speaker 1
-    right_channel = audio_data[1]  # Speaker 2
+    left_channel = audio_data[0] 
+    right_channel = audio_data[1]
     
-    # Save individual speaker files
     first_speaker_path = os.path.join(output_folder, "first_speaker.wav")
     second_speaker_path = os.path.join(output_folder, "second_speaker.wav")
     
@@ -172,13 +144,10 @@ def split_stereo_conversation(stereo_file, folder_name):
     sf.write(first_speaker_path, left_channel, sample_rate, format='WAV', subtype='PCM_16')
     sf.write(second_speaker_path, right_channel, sample_rate, format='WAV', subtype='PCM_16')
     
-    # Also save the original stereo file for reference
     conversation_path = os.path.join(output_folder, "conversation.wav")
-    # Transpose to (samples, channels) for soundfile
     stereo_transposed = audio_data.T
     sf.write(conversation_path, stereo_transposed, sample_rate, format='WAV', subtype='PCM_16')
-    
-    # Calculate duration
+
     duration = len(left_channel) / sample_rate
     
     return {
@@ -191,11 +160,8 @@ def split_stereo_conversation(stereo_file, folder_name):
     }
 
 def display_basic_results(result):
-    """Display basic file information after merging."""
-    # Display success message
     st.success(f"✅ Audio files processed successfully!")
     
-    # Display results
     st.markdown("### 📁 Output Files")
     
     col1, col2, col3 = st.columns(3)
@@ -214,7 +180,6 @@ def display_basic_results(result):
     
     st.markdown(f"**📂 Files saved to:** `{result['output_folder']}/`")
     
-    # Show file sizes
     st.markdown("### 📊 File Information")
     file_sizes = {}
     files_to_show = [
@@ -234,18 +199,14 @@ def display_basic_results(result):
     st.table(df)
 
 def transcribe_audio(audio_path, output_file, language="es"):
-    """Transcribe audio file with speaker diarization."""
     try:
-        # Get API key from environment
         api_key = os.getenv("DEEPGRAM_API_KEY")
         if not api_key:
             st.error("❌ DEEPGRAM_API_KEY not found in environment variables. Please set it in .env file.")
             return None
         
-        # Create Deepgram client with API key
         deepgram = DeepgramClient(api_key=api_key)
         
-        # Prepare transcription parameters
         transcription_params = {
             "model": "nova-3",
             "language": language,
@@ -255,17 +216,14 @@ def transcribe_audio(audio_path, output_file, language="es"):
             "filler_words": True,
         }
         
-        # Transcribe with diarization and summary
         with open(audio_path, "rb") as audio_file:
             response = deepgram.listen.v1.media.transcribe_file(
                 request=audio_file.read(),
                 **transcription_params
             )
         
-        # Convert response to dict
         response_json = response.model_dump() if hasattr(response, 'model_dump') else response.dict()
         
-        # Debug: Save full response to see structure
         debug_file = output_file.replace('.txt', '_full_response.json')
         with open(debug_file, 'w', encoding='utf-8') as f:
             json.dump(response_json, f, indent=2, default=str, ensure_ascii=False)
@@ -273,7 +231,6 @@ def transcribe_audio(audio_path, output_file, language="es"):
         st.write("🔍 Debug - Full response saved to:", debug_file)
         st.write("🔍 Debug - Response keys:", list(response_json.keys()) if response_json else "Empty response")
         
-        # Show structure
         if 'results' in response_json:
             st.write("🔍 Results structure:")
             utt_count = response_json['results'].get('utterances')
@@ -289,7 +246,6 @@ def transcribe_audio(audio_path, output_file, language="es"):
                 "utterances_count": utt_count,
             })
         
-        # Extract utterances with speaker information - using same approach as transcribe.py
         utterances = []
         
         if 'results' in response_json and 'channels' in response_json['results']:
@@ -297,14 +253,11 @@ def transcribe_audio(audio_path, output_file, language="es"):
                 if 'alternatives' in channel and len(channel['alternatives']) > 0:
                     alternative = channel['alternatives'][0]
                     
-                    # Use paragraphs/sentences approach (same as transcribe.py)
                     if 'paragraphs' in alternative:
                         paragraphs_data = alternative['paragraphs']
                         st.write(f"🔍 Paragraphs type: {type(paragraphs_data)}")
                         
-                        # Handle both dict and list structures
                         if isinstance(paragraphs_data, dict):
-                            # If it's a dict, get the 'paragraphs' list inside it
                             paragraphs_list = paragraphs_data.get('paragraphs', [])
                         elif isinstance(paragraphs_data, list):
                             paragraphs_list = paragraphs_data
@@ -318,7 +271,7 @@ def transcribe_audio(audio_path, output_file, language="es"):
                                 sentences_list = paragraph['sentences']
                                 if sentences_list:
                                     for sentence in sentences_list:
-                                        speaker_id = paragraph.get('speaker', 0)  # Speaker is on paragraph level
+                                        speaker_id = paragraph.get('speaker', 0) 
                                         start = sentence.get('start', 0)
                                         end = sentence.get('end', 0)
                                         transcript = sentence.get('text', '').strip()
@@ -331,24 +284,19 @@ def transcribe_audio(audio_path, output_file, language="es"):
                                                 'transcript': transcript
                                             })
         
-        # Sort by start time
         utterances.sort(key=lambda x: x['start'])
         
-        # Save to file
         with open(output_file, "w", encoding="utf-8") as f:
             for utt in utterances:
-                # Format: [start,end]  SPEAKER_ID  transcript
                 line = f"[{utt['start']:.3f},{utt['end']:.3f}]\t{utt['speaker']}\t{utt['transcript']}\n"
                 f.write(line)
         
-        # Extract summary if available
         summary_text = None
         if 'results' in response_json and 'summary' in response_json['results']:
             summary = response_json['results']['summary']
             if summary and 'short' in summary:
                 summary_text = summary['short']
                 
-                # Save summary to separate file
                 summary_file = output_file.replace('timestamped_transcription.txt', 'summary.txt')
                 with open(summary_file, 'w', encoding='utf-8') as f:
                     f.write(summary_text)
@@ -369,15 +317,12 @@ def transcribe_audio(audio_path, output_file, language="es"):
         return None
 
 def speechmatics_analysis(audio_path, output_folder, language="es"):
-    """Get summary and audio events from Speechmatics API."""
     try:
-        # Get API key from environment
         api_key = os.getenv("SPEECHMATICS_API_KEY")
         if not api_key:
             st.error("❌ SPEECHMATICS_API_KEY not found in environment variables. Please set it in .env file.")
             return None
         
-        # Define transcription parameters
         conf = {
             "audio_events_config": {
                 "types": [
@@ -401,35 +346,28 @@ def speechmatics_analysis(audio_path, output_folder, language="es"):
             "type": "transcription"
         }
         
-        # Create connection settings
         settings = ConnectionSettings(
             url="https://asr.api.speechmatics.com/v2",
             auth_token=api_key,
         )
         
-        # Open the client using a context manager
         with BatchClient(settings) as client:
             job_id = client.submit_job(
                 audio=audio_path,
                 transcription_config=conf,
             )
             
-            # Wait for completion
             transcript = client.wait_for_completion(job_id, transcription_format="json-v2")
             
-            # Extract summary
             summary = transcript.get("summary", {}).get("content", "")
             
-            # Extract audio events
             audio_events = transcript.get("audio_events", [])
             audio_event_summary = transcript.get("audio_event_summary", {})
             
-            # Save summary to file
             summary_file = os.path.join(output_folder, "summary.txt")
             with open(summary_file, 'w', encoding='utf-8') as f:
                 f.write(summary)
             
-            # Save metadata with audio events
             metadata_file = os.path.join(output_folder, "metadata.txt")
             with open(metadata_file, 'w', encoding='utf-8') as f:
                 f.write("=== AUDIO EVENT SUMMARY ===\n\n")
@@ -486,32 +424,20 @@ def speechmatics_analysis(audio_path, output_folder, language="es"):
         return None
 
 def parse_hume_predictions(job_predictions):
-    """Parse Hume predictions and format them for output.
-    
-    Args:
-        job_predictions: The predictions from the Hume API
-    
-    Returns:
-        str: Formatted output text
-    """
-    # Prepare output lines
     lines = []
     
     lines.append("\n" + "="*100)
     lines.append("FORMATTED TRANSCRIPT WITH EMOTION ANALYSIS")
     lines.append("="*100)
     
-    # Parse the prediction string
     pred_str = str(job_predictions[0]) if job_predictions else ""
     
     predictions = []
-    
-    # Find all occurrences of ProsodyPrediction(text='...')
+
     text_start = 'ProsodyPrediction(text='
-    segments = pred_str.split(text_start)[1:]  # Get all segments after first occurrence
+    segments = pred_str.split(text_start)[1:]  
     
     for segment in segments:
-        # Extract text - handle quotes properly
         if segment.startswith("'"):
             quote_char = "'"
         elif segment.startswith('"'):
@@ -519,8 +445,7 @@ def parse_hume_predictions(job_predictions):
         else:
             continue
         
-        # Find the closing quote
-        text_start_idx = 1  # Skip opening quote
+        text_start_idx = 1 
         text_end_idx = text_start_idx
         while text_end_idx < len(segment) and segment[text_end_idx] != quote_char:
             text_end_idx += 1
@@ -530,18 +455,15 @@ def parse_hume_predictions(job_predictions):
         
         text = segment[text_start_idx:text_end_idx]
         
-        # Extract time
         time_match = re.search(r"time=TimeInterval\(begin=([\d.]+), end=([\d.]+)\)", segment)
         if not time_match:
             continue
         begin = float(time_match.group(1))
         end = float(time_match.group(2))
         
-        # Extract confidence
         conf_match = re.search(r"confidence=([\d.]+)", segment)
         confidence = float(conf_match.group(1)) if conf_match else 1.0
         
-        # Extract emotions
         emotion_pattern = r"EmotionScore\(name='([^']+)', score=([\d.]+)\)"
         emotions = []
         for emo_match in re.finditer(emotion_pattern, segment):
@@ -568,12 +490,10 @@ def parse_hume_predictions(job_predictions):
         text = pred['text']
         time_str = f"{pred['begin']:.1f}s-{pred['end']:.1f}s"
         
-        # Get top 3 emotions
         pred['emotions'].sort(key=lambda x: x[1], reverse=True)
         top_emotions = pred['emotions'][:3]
         emotions_text = ", ".join([f"{name} ({score:.0%})" for name, score in top_emotions])
         
-        # Truncate text if too long for display
         if len(text) > 52:
             text = text[:49] + "..."
         
@@ -586,16 +506,6 @@ def parse_hume_predictions(job_predictions):
     return "\n".join(lines)
 
 async def run_hume_analysis_async(audio_path, status_placeholder=None):
-    """Run Hume API analysis on audio file (async function).
-    
-    Args:
-        audio_path: Path to audio file
-        status_placeholder: Optional Streamlit placeholder for status updates
-    
-    Returns:
-        dict: Analysis results with predictions and job_id
-    """
-    # Initialize an authenticated client
     api_key = os.getenv("HUME_API_KEY")
     if not api_key:
         raise ValueError("HUME_API_KEY not found in environment variables")
@@ -605,15 +515,12 @@ async def run_hume_analysis_async(audio_path, status_placeholder=None):
     if status_placeholder:
         status_placeholder.info("🔄 Submitting job to Hume API...")
     
-    # Open audio file
     audio_file = open(audio_path, mode="rb")
     
-    # Create configurations for audio analysis using Prosody model
     prosody_config = Prosody()
     models_chosen = Models(prosody=prosody_config)
     stringified_configs = InferenceBaseRequest(models=models_chosen)
     
-    # Start an inference job
     job_id = await client.expression_measurement.batch.start_inference_job_from_local_file(
         json=stringified_configs, file=[audio_file]
     )
@@ -623,8 +530,7 @@ async def run_hume_analysis_async(audio_path, status_placeholder=None):
     if status_placeholder:
         status_placeholder.info(f"✅ Job submitted! Job ID: {job_id}\n🔄 Waiting for predictions...")
     
-    # Wait for predictions
-    max_wait = 600  # Wait up to 10 minutes
+    max_wait = 600 
     waited = 0
     
     while waited < max_wait:
@@ -633,7 +539,6 @@ async def run_hume_analysis_async(audio_path, status_placeholder=None):
                 id=job_id
             )
             
-            # Check if we got actual predictions
             if job_predictions and len(job_predictions) > 0:
                 pred_str = str(job_predictions[0])
                 if 'results=InferenceResults(predictions=[]' not in pred_str:
@@ -644,7 +549,6 @@ async def run_hume_analysis_async(audio_path, status_placeholder=None):
                         'job_id': job_id
                     }
             
-            # Check job status
             job_details = await client.expression_measurement.batch.get_job_details(
                 id=job_id
             )
@@ -668,27 +572,14 @@ async def run_hume_analysis_async(audio_path, status_placeholder=None):
     raise Exception("Timed out waiting for predictions.")
 
 def hume_emotion_analysis(audio_path, output_folder):
-    """Run Hume emotion analysis on audio file and save results.
-    
-    Args:
-        audio_path: Path to audio file
-        output_folder: Folder to save the output file
-    
-    Returns:
-        dict: Results with output file path and formatted text
-    """
     try:
-        # Get API key from environment
         api_key = os.getenv("HUME_API_KEY")
         if not api_key:
             st.error("❌ HUME_API_KEY not found in environment variables. Please set it in .env file.")
             return None
         
-        # Create status placeholder
         status_placeholder = st.empty()
         
-        # Run async analysis - create new event loop for Streamlit
-        # Streamlit doesn't run in an async context, so we create a new loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -696,14 +587,11 @@ def hume_emotion_analysis(audio_path, output_folder):
         finally:
             loop.close()
         
-        # Parse predictions
         formatted_output = parse_hume_predictions(result['predictions'])
         
-        # Add timestamp
         formatted_output += "\n" + "-" * 100 + "\n"
         formatted_output += f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
         
-        # Save to file
         output_file = os.path.join(output_folder, "hume_emotion.txt")
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(formatted_output)
@@ -721,34 +609,20 @@ def hume_emotion_analysis(audio_path, output_folder):
         return None
 
 def merge_transcripts(deepgram_file, hume_file, output_file):
-    """Merge Deepgram and Hume transcripts using OpenAI.
-    
-    Args:
-        deepgram_file: Path to Deepgram transcript file
-        hume_file: Path to Hume emotion transcript file
-        output_file: Path to save the merged transcript
-    
-    Returns:
-        str: Merged transcript text
-    """
     try:
-        # Get API key from environment
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             st.error("❌ OPENAI_API_KEY not found in environment variables. Please set it in .env file.")
             return None
         
-        # Initialize OpenAI client
         client = OpenAI(api_key=api_key)
         
-        # Read both input files
         with open(deepgram_file, "r", encoding="utf-8") as f:
             deepgram_text = f.read()
         
         with open(hume_file, "r", encoding="utf-8") as f:
             hume_text = f.read()
         
-        # Prepare prompt for the LLM
         prompt = f"""
 You are an expert transcript editor.
 
@@ -783,7 +657,6 @@ Now produce the final merged transcript.
 Now produce the final merged transcript.
 """
         
-        # Call the model
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -793,10 +666,8 @@ Now produce the final merged transcript.
             temperature=0.3
         )
         
-        # Extract the model output
         merged_transcript = response.choices[0].message.content
         
-        # Save the result to file
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(merged_transcript)
         
@@ -808,17 +679,13 @@ Now produce the final merged transcript.
         traceback.print_exc()
         return None
 
-# Page navigation
 if st.session_state.current_page == 'annotation':
-    # Annotation and Emotion Marking Page (Main Page)
     st.title("📝 Annotation and Emotion Marking")
     
-    # Button to go to audio merging page
     if st.button("➡️ Go to Audio Merging Tools"):
         st.session_state.show_password_input = True
         st.rerun()
     
-    # Password input for accessing merging page
     if st.session_state.show_password_input:
         st.markdown("---")
         st.markdown("### 🔒 Password Required")
@@ -841,46 +708,36 @@ if st.session_state.current_page == 'annotation':
     
     st.markdown("---")
     
-    # File uploaders
     conversation_audio = st.file_uploader("Upload conversation.wav file", type=['wav', 'm4a', 'mp3'], key="annotation_audio")
     transcript_file = st.file_uploader("Upload final_transcript.txt file", type=['txt'], key="annotation_transcript")
     
     if conversation_audio and transcript_file:
-        # Parse transcript file - keep original format for saving
         transcript_text = transcript_file.read().decode('utf-8')
         transcript_lines = transcript_text.strip().split('\n')
         
-        # Store original lines for saving
         original_transcript_lines = [line.strip() for line in transcript_lines if line.strip()]
         
-        # Parse transcript entries
         transcript_entries = []
         for line in transcript_lines:
             line = line.strip()
             if not line:
                 continue
             
-            # Parse format: [00:00:00.240] Speaker 1: Text (Emotion: ...)
-            # OR [13.135,13.775] Speaker 1: Text (Emotion: ...)
-            # Extract timestamp - try both formats
             total_seconds = None
             end_seconds = None
-            timestamp_format = None  # 'time_format' or 'range_format'
+            timestamp_format = None 
             
-            # Try old format: [HH:MM:SS.mmm]
             timestamp_match = re.search(r'\[(\d{2}):(\d{2}):(\d{2}\.\d+)\]', line)
             if timestamp_match:
                 hours = int(timestamp_match.group(1))
                 minutes = int(timestamp_match.group(2))
                 seconds = float(timestamp_match.group(3))
                 total_seconds = hours * 3600 + minutes * 60 + seconds
-                end_seconds = total_seconds  # For old format, end equals start
+                end_seconds = total_seconds 
                 timestamp_format = 'time_format'
             else:
-                # Try new format: [start,end]
                 timestamp_match = re.search(r'\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]', line)
                 if timestamp_match:
-                    # Use the start time (first number) as the timestamp
                     total_seconds = float(timestamp_match.group(1))
                     end_seconds = float(timestamp_match.group(2))
                     timestamp_format = 'range_format'
@@ -888,38 +745,30 @@ if st.session_state.current_page == 'annotation':
             if total_seconds is None:
                 continue
             
-            # Extract speaker
             speaker_match = re.search(r'Speaker \d+', line)
             speaker = speaker_match.group(0) if speaker_match else "Unknown"
             
-            # Extract text (everything after speaker, before emotion if present)
             text_start = line.find(':', line.find(speaker))
             if text_start == -1:
                 continue
             
             text_part = line[text_start + 1:].strip()
-            # Extract intensity if present (format: [Intensity: X] or Intensity: X)
-            intensity = 3  # Default intensity
+            intensity = 3 
             intensity_match = re.search(r'\[Intensity:\s*(\d+)\]|Intensity:\s*(\d+)', text_part, re.IGNORECASE)
             if intensity_match:
                 intensity = int(intensity_match.group(1) or intensity_match.group(2))
-                # Remove intensity from text_part
                 text_part = re.sub(r'\[Intensity:\s*\d+\]|Intensity:\s*\d+', '', text_part, flags=re.IGNORECASE).strip()
             
-            # Extract emotion part if present
             emotion_match = re.search(r'\s*\(Emotion:.*?\)\s*$', text_part)
             emotion_part = ""
             emotions_list = []
             if emotion_match:
                 emotion_part = emotion_match.group(0).strip()
                 text_part = text_part[:emotion_match.start()].strip()
-                # Extract individual emotions from format: (Emotion: Emotion1, Emotion2)
                 emotion_content = emotion_part.replace('(Emotion:', '').replace(')', '').strip()
                 if emotion_content:
-                    # Split by comma and clean up
                     emotions_list = [e.strip() for e in emotion_content.split(',') if e.strip()]
             
-            # Store original line format for reconstruction
             original_line = line
             
             transcript_entries.append({
@@ -929,47 +778,39 @@ if st.session_state.current_page == 'annotation':
                 'speaker': speaker,
                 'text': text_part,
                 'emotion': emotion_part,
-                'emotions': emotions_list,  # Store as array for easier manipulation
-                'intensity': intensity,  # Store intensity (default 3)
+                'emotions': emotions_list, 
+                'intensity': intensity, 
                 'original_line': original_line,
-                'index': len(transcript_entries)  # Store index for matching with original lines
+                'index': len(transcript_entries)  
             })
         
-        # Sort by time
         transcript_entries.sort(key=lambda x: x['time'])
         
         if transcript_entries:
             st.success(f"✅ Loaded {len(transcript_entries)} transcript entries")
             
-            # Save audio file temporarily
             with tempfile.NamedTemporaryFile(delete=False, suffix=f".{conversation_audio.name.split('.')[-1]}") as tmp_audio:
                 tmp_audio.write(conversation_audio.read())
                 tmp_audio_path = tmp_audio.name
             
-            # Convert to base64 for embedding
             with open(tmp_audio_path, 'rb') as f:
                 audio_bytes = f.read()
                 audio_base64 = base64.b64encode(audio_bytes).decode()
             
-            # Determine audio format
             audio_ext = conversation_audio.name.split('.')[-1].lower()
             audio_format_map = {'wav': 'wav', 'mp3': 'mp3', 'm4a': 'mp4'}
             audio_format = audio_format_map.get(audio_ext, 'wav')
             
-            # Create JSON data for the transcript
             transcript_json = json.dumps(transcript_entries)
             
-            # Store original transcript format in session state for saving
             if 'original_transcript_data' not in st.session_state:
                 st.session_state.original_transcript_data = {
                     'entries': transcript_entries,
                     'original_lines': original_transcript_lines
                 }
-            
-            # Container for edited transcript data
+
             edited_transcript_container = st.container()
             
-            # Create HTML component with audio player and synchronized transcript
             html_content = f"""
             <!DOCTYPE html>
             <html>
@@ -2091,16 +1932,12 @@ if st.session_state.current_page == 'annotation':
             </body>
             </html>
             """
-            
-            # Display the HTML component
+
             html_component = st.components.v1.html(html_content, height=700)
             
-            # Handle saving the edited transcript
-            # Text area for editing the transcript
             edited_text = st.text_area("Edited transcript:", height=300, key="manual_edit", 
                                       placeholder="Click 'Prepare Save' above and paste here (Ctrl+V or Cmd+V), then edit and download below...")
             
-            # Download button - will trigger file save dialog
             if edited_text and edited_text.strip():
                 st.download_button(
                     label="💾 Download Annotation",
@@ -2113,8 +1950,6 @@ if st.session_state.current_page == 'annotation':
             else:
                 st.info("💡 Paste the edited transcript above to enable download.")
             
-            
-            # Cleanup
             if os.path.exists(tmp_audio_path):
                 os.unlink(tmp_audio_path)
         else:
@@ -2124,8 +1959,6 @@ if st.session_state.current_page == 'annotation':
         st.warning("⚠️ Please upload both the audio file and transcript file to proceed.")
     
 else:
-    # Main Page (Audio Merging Tools)
-    # Check authentication before allowing access
     if not st.session_state.merging_page_authenticated:
         st.error("🔒 Access Denied: Authentication required")
         st.info("Please use the password-protected access from the Annotation page.")
@@ -2137,14 +1970,12 @@ else:
     st.title("🎙️ Audio Conversation Merger")
     st.markdown("Upload two audio files (.m4a or .wav) to create a stereo conversation file")
     
-    # Button to go back to annotation page (main page)
     if st.button("← Back to Annotation Page", use_container_width=True):
         st.session_state.current_page = 'annotation'
         st.rerun()
     
     st.markdown("---")
     
-    # File uploaders
     col1, col2 = st.columns(2)
 
     with col1:
@@ -2155,18 +1986,15 @@ else:
         st.subheader("Second Speaker")
         second_file = st.file_uploader("Upload second speaker audio", type=['m4a', 'wav', 'mp3'], key="second")
 
-    # Folder name input
     st.markdown("---")
     folder_name = st.text_input("Enter folder name for this recording:", placeholder="e.g., Meeting_2024_10_29")
 
-    # Merge buttons
     col1, col2 = st.columns(2)
     with col1:
         merge_button = st.button("🎵 Merge Audio", type="primary", use_container_width=True)
     with col2:
         just_merge_button = st.button("⚡ Just Merge", use_container_width=True)
 
-    # Separate section for splitting stereo conversation
     st.markdown("---")
     st.markdown("### 🔊 Split Stereo Conversation")
     st.markdown("Upload a stereo conversation file to separate it into individual speaker files (left channel = speaker 1, right channel = speaker 2)")
@@ -2176,7 +2004,6 @@ else:
 
     split_button = st.button("🔊 Create Separate Conversations", type="primary", use_container_width=True)
 
-    # Separate section for transcribing existing conversation
     st.markdown("---")
     st.markdown("### 📝 Or Transcribe an Existing Conversation")
     st.markdown("Upload a stereo conversation file to transcribe it (no merging needed)")
@@ -2186,16 +2013,13 @@ else:
 
     transcribe_button = st.button("📝 Transcribe the Final Conversation", type="primary", use_container_width=True)
 
-    # Process audio when "Just Merge" button is clicked
     if just_merge_button:
-        # Validation
         if not first_file or not second_file:
             st.error("❌ Please upload both audio files")
         elif not folder_name:
             st.error("❌ Please enter a folder name")
         else:
             try:
-                # Create temporary files for uploaded audio
                 with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{first_file.name}") as tmp_first:
                     tmp_first.write(first_file.read())
                     tmp_first_path = tmp_first.name
@@ -2204,30 +2028,24 @@ else:
                     tmp_second.write(second_file.read())
                     tmp_second_path = tmp_second.name
                 
-                # Process audio
                 result = process_audio(tmp_first_path, tmp_second_path, folder_name)
                 
-                # Clean up temp files
                 os.unlink(tmp_first_path)
                 os.unlink(tmp_second_path)
                 
-                # Display basic results (no transcription/analysis)
                 display_basic_results(result)
                 
             except Exception as e:
                 st.error(f"❌ Error processing audio: {str(e)}")
                 st.exception(e)
 
-    # Process audio when button is clicked
     if merge_button:
-        # Validation
         if not first_file or not second_file:
             st.error("❌ Please upload both audio files")
         elif not folder_name:
             st.error("❌ Please enter a folder name")
         else:
             try:
-                # Create temporary files for uploaded audio
                 with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{first_file.name}") as tmp_first:
                     tmp_first.write(first_file.read())
                     tmp_first_path = tmp_first.name
@@ -2236,17 +2054,13 @@ else:
                     tmp_second.write(second_file.read())
                     tmp_second_path = tmp_second.name
                 
-                # Process audio
                 result = process_audio(tmp_first_path, tmp_second_path, folder_name)
                 
-                # Clean up temp files
                 os.unlink(tmp_first_path)
                 os.unlink(tmp_second_path)
                 
-                # Display basic results
                 display_basic_results(result)
                 
-                # Transcribe the conversation
                 api_key = os.getenv("DEEPGRAM_API_KEY")
                 if api_key:
                     st.markdown("---")
@@ -2274,7 +2088,6 @@ else:
                             summary_file = transcript_file.replace('timestamped_transcription.txt', 'summary.txt')
                             st.markdown(f"**📄 Summary saved to:** `{summary_file}`")
                         
-                        # Show preview
                         st.markdown("**Preview:**")
                         preview_text = ""
                         for i, utt in enumerate(transcript_result['utterances'][:5]):
@@ -2282,14 +2095,12 @@ else:
                         
                         st.text(preview_text)
                         
-                        # Show summary if available
                         if transcript_result.get('summary'):
                             with st.expander("📄 Conversation Summary"):
                                 st.write(transcript_result['summary'])
                 else:
                     st.warning("⚠️ DEEPGRAM_API_KEY not set. Transcription skipped.")
                 
-                # Run Speechmatics analysis
                 speechmatics_api_key = os.getenv("SPEECHMATICS_API_KEY")
                 if speechmatics_api_key:
                     st.markdown("---")
@@ -2310,11 +2121,9 @@ else:
                         st.markdown(f"**📄 Summary saved to:** `{speechmatics_result['summary_file']}`")
                         st.markdown(f"**📊 Metadata saved to:** `{speechmatics_result['metadata_file']}`")
                         
-                        # Show summary
                         with st.expander("📄 Speechmatics Summary"):
                             st.write(speechmatics_result['summary'])
                         
-                        # Show audio events if any
                         if speechmatics_result['audio_events']:
                             with st.expander("🎵 Detected Audio Events"):
                                 for event in speechmatics_result['audio_events']:
@@ -2327,30 +2136,24 @@ else:
                 st.error(f"❌ Error processing audio: {str(e)}")
                 st.exception(e)
 
-    # Split stereo conversation when button is clicked
     if split_button:
-        # Validation
         if not split_conversation_file:
             st.error("❌ Please upload a stereo conversation audio file")
         elif not split_folder_name:
             st.error("❌ Please enter a folder name for split files")
         else:
             try:
-                # Save uploaded file temporarily
                 with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{split_conversation_file.name}") as tmp_audio:
                     tmp_audio.write(split_conversation_file.read())
                     tmp_audio_path = tmp_audio.name
                 
-                # Split the stereo conversation
                 result = split_stereo_conversation(tmp_audio_path, split_folder_name)
                 
-                # Clean up temp file
                 os.unlink(tmp_audio_path)
                 
                 if result:
                     st.success(f"✅ Conversation split successfully!")
                     
-                    # Display results
                     st.markdown("### 📁 Output Files")
                     
                     col1, col2, col3 = st.columns(3)
@@ -2369,7 +2172,6 @@ else:
                     
                     st.markdown(f"**📂 Files saved to:** `{result['output_folder']}/`")
                     
-                    # Show file sizes
                     st.markdown("### 📊 File Information")
                     file_sizes = {}
                     files_to_show = [
@@ -2395,46 +2197,35 @@ else:
                 st.error(f"❌ Error splitting conversation: {str(e)}")
                 st.exception(e)
 
-    # Transcribe existing conversation when button is clicked
     if transcribe_button:
-        # Validation
         if not conversation_file:
             st.error("❌ Please upload a conversation audio file")
         elif not transcribe_folder_name:
             st.error("❌ Please enter a folder name for transcription")
         else:
             try:
-                # Create output directory structure
                 base_folder = "Recording"
                 output_folder = os.path.join(base_folder, transcribe_folder_name)
                 os.makedirs(output_folder, exist_ok=True)
                 
-                # Save uploaded file temporarily
                 with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{conversation_file.name}") as tmp_audio:
                     tmp_audio.write(conversation_file.read())
                     tmp_audio_path = tmp_audio.name
                 
-                # Optionally save the conversation file to the output folder
                 conversation_path = os.path.join(output_folder, "conversation.wav")
                 
-                # Convert to WAV if needed and save to output folder
                 audio_data, sample_rate = librosa.load(tmp_audio_path, sr=None, mono=False)
                 
-                # Ensure audio_data is in the correct format (samples x channels)
                 if len(audio_data.shape) == 1:
-                    # Mono audio
                     sf.write(conversation_path, audio_data, sample_rate, format='WAV', subtype='PCM_16')
                 else:
-                    # Stereo or multi-channel: librosa returns (channels, samples), need (samples, channels)
                     audio_data = audio_data.T
                     sf.write(conversation_path, audio_data, sample_rate, format='WAV', subtype='PCM_16')
                 
-                # Clean up temp file
                 os.unlink(tmp_audio_path)
                 
                 st.success(f"✅ Conversation file saved to: `{conversation_path}`")
                 
-                # Transcribe the conversation
                 api_key = os.getenv("DEEPGRAM_API_KEY")
                 if api_key:
                     st.markdown("---")
@@ -2462,7 +2253,6 @@ else:
                             summary_file = transcript_file.replace('timestamped_transcription.txt', 'summary.txt')
                             st.markdown(f"**📄 Summary saved to:** `{summary_file}`")
                         
-                        # Show preview
                         st.markdown("**Preview:**")
                         preview_text = ""
                         for i, utt in enumerate(transcript_result['utterances'][:5]):
@@ -2470,14 +2260,12 @@ else:
                         
                         st.text(preview_text)
                         
-                        # Show summary if available
                         if transcript_result.get('summary'):
                             with st.expander("📄 Conversation Summary"):
                                 st.write(transcript_result['summary'])
                 else:
                     st.warning("⚠️ DEEPGRAM_API_KEY not set. Transcription skipped.")
                 
-                # Run Speechmatics analysis
                 speechmatics_api_key = os.getenv("SPEECHMATICS_API_KEY")
                 if speechmatics_api_key:
                     st.markdown("---")
@@ -2498,11 +2286,9 @@ else:
                         st.markdown(f"**📄 Summary saved to:** `{speechmatics_result['summary_file']}`")
                         st.markdown(f"**📊 Metadata saved to:** `{speechmatics_result['metadata_file']}`")
                         
-                        # Show summary
                         with st.expander("📄 Speechmatics Summary"):
                             st.write(speechmatics_result['summary'])
                         
-                        # Show audio events if any
                         if speechmatics_result['audio_events']:
                             with st.expander("🎵 Detected Audio Events"):
                                 for event in speechmatics_result['audio_events']:
@@ -2518,7 +2304,6 @@ else:
                 st.error(f"❌ Error transcribing audio: {str(e)}")
                 st.exception(e)
 
-    # Separate section for Final transcript creation
     st.markdown("---")
     st.markdown("### 📝 Create Final Transcript")
     st.markdown("Upload an audio file to generate a final merged transcript with emotion analysis. This will:")
@@ -2531,31 +2316,25 @@ else:
 
     final_button = st.button("📝 Create Final Transcript", type="primary", use_container_width=True)
 
-    # Process Final transcript creation when button is clicked
     if final_button:
-        # Validation
         if not final_audio_file:
             st.error("❌ Please upload an audio file")
         elif not final_folder_name:
             st.error("❌ Please enter a folder name")
         else:
             try:
-                # Create output directory structure
                 base_folder = "Recording"
                 output_folder = os.path.join(base_folder, final_folder_name)
                 os.makedirs(output_folder, exist_ok=True)
                 
-                # Save uploaded file temporarily
                 with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{final_audio_file.name}") as tmp_audio:
                     tmp_audio.write(final_audio_file.read())
                     tmp_audio_path = tmp_audio.name
                 
-                # Check if timestamped_transcription.txt already exists
                 transcript_file = os.path.join(output_folder, "timestamped_transcription.txt")
                 deepgram_transcript_file = os.path.join(output_folder, "deepgram_transcript.txt")
                 conversation_path = os.path.join(output_folder, "conversation.wav")
                 
-                # Save uploaded audio file as conversation.wav if it doesn't exist
                 if not os.path.exists(conversation_path):
                     audio_data, sample_rate = librosa.load(tmp_audio_path, sr=None, mono=False)
                     if len(audio_data.shape) == 1:
@@ -2564,7 +2343,6 @@ else:
                         audio_data = audio_data.T
                         sf.write(conversation_path, audio_data, sample_rate, format='WAV', subtype='PCM_16')
                 
-                # Step 1: Transcribe with Deepgram if needed
                 if not os.path.exists(transcript_file):
                     api_key = os.getenv("DEEPGRAM_API_KEY")
                     if not api_key:
@@ -2586,29 +2364,23 @@ else:
                 else:
                     st.info("ℹ️ Using existing transcription file.")
                 
-                # Create deepgram_transcript.txt from timestamped_transcription.txt for the merge function
-                # Read the timestamped format and convert to readable format
                 with open(transcript_file, "r", encoding="utf-8") as f:
                     timestamped_lines = f.readlines()
                 
-                # Format it for better readability in the merge prompt
                 formatted_deepgram = ""
                 for line in timestamped_lines:
                     line = line.strip()
                     if line:
-                        # Format: [start,end]  SPEAKER_ID  transcript
                         parts = line.split('\t')
                         if len(parts) >= 3:
                             time_range = parts[0]
                             speaker = parts[1]
-                            transcript = '\t'.join(parts[2:])  # In case transcript contains tabs
+                            transcript = '\t'.join(parts[2:])
                             formatted_deepgram += f"{time_range} {speaker}: {transcript}\n"
                 
-                # Save formatted version for merge function
                 with open(deepgram_transcript_file, "w", encoding="utf-8") as f:
                     f.write(formatted_deepgram)
                 
-                # Step 2: Run Hume emotion analysis
                 st.markdown("---")
                 st.markdown("### 😊 Step 2: Emotion Analysis")
                 
@@ -2622,7 +2394,6 @@ else:
                 
                 st.success("✅ Hume emotion analysis completed!")
                 
-                # Step 3: Merge transcripts
                 st.markdown("---")
                 st.markdown("### 🔄 Step 3: Merging Transcripts")
                 
@@ -2632,7 +2403,6 @@ else:
                 with st.spinner("Merging transcripts with AI... This may take a moment."):
                     merged_transcript = merge_transcripts(deepgram_transcript_file, hume_file, final_transcript_file)
                 
-                # Clean up temp file
                 os.unlink(tmp_audio_path)
                 
                 if merged_transcript:
@@ -2642,13 +2412,11 @@ else:
                     st.markdown(f"**📝 Deepgram transcript:** `{transcript_file}`")
                     st.markdown(f"**😊 Hume emotion transcript:** `{hume_result['output_file']}`")
                     
-                    # Show preview
                     st.markdown("---")
                     st.markdown("### 📄 Preview of Final Transcript")
-                    preview_lines = merged_transcript.split('\n')[:30]  # First 30 lines
+                    preview_lines = merged_transcript.split('\n')[:30]
                     st.text('\n'.join(preview_lines))
                     
-                    # Show full output in expander
                     with st.expander("📄 View Full Final Transcript"):
                         st.text(merged_transcript)
                 else:
@@ -2658,6 +2426,5 @@ else:
                 st.error(f"❌ Error creating final transcript: {str(e)}")
                 st.exception(e)
 
-    # Footer
     st.markdown("---")
     st.markdown("💡 **Tip:** The first speaker will be on the left channel, second speaker on the right channel in the stereo output.")

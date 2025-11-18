@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  w-app-backend:
+    container_name: audio-streamlit-backend
+    image: audio-streamlit-backend
+    build: .
+    restart: always
+    env_file: .env
+    ports:
+      - "8501:8501"
+    networks:
+      - mynetwork
+    mem_limit: 3g
+    mem_reservation: 1g
+
+networks:
+  mynetwork:
+    driver: bridge
