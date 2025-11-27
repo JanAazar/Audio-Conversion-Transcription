@@ -98,7 +98,7 @@ def parse_hume_predictions(job_predictions):
         text = pred["text"]
         time_str = f"{pred['begin']:.1f}s-{pred['end']:.1f}s"
         pred["emotions"].sort(key=lambda item: item[1], reverse=True)
-        top_emotions = pred["emotions"][:3]
+        top_emotions = pred["emotions"][:1]
         emotions_text = ", ".join(f"{name} ({score:.0%})" for name, score in top_emotions)
         if len(text) > 52:
             text = text[:49] + "..."
@@ -132,7 +132,11 @@ async def run_hume_async(audio_path: Path):
             body = getattr(exc, "body", None)
             if isinstance(body, dict):
                 message = body.get("message", "")
-            if exc.status_code == 400 and message.lower() == "job is in progress.":
+            lower_message = message.lower()
+            if exc.status_code == 400 and lower_message in {
+                "job is in progress.",
+                "job is still queued.",
+            }:
                 await asyncio.sleep(2)
                 waited += 2
                 continue

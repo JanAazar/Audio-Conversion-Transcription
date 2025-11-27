@@ -13,8 +13,15 @@ from pathlib import Path
 from deepgram import DeepgramClient
 from dotenv import load_dotenv
 import time
-import constants
+from httpx import HTTPStatusError
+# from speechmatics.models import ConnectionSettings
+# from speechmatics.batch_client import BatchClient
+# from hume import AsyncHumeClient
+# from hume.expression_measurement.batch import Face, Prosody, Models
+# from hume.expression_measurement.batch.types import InferenceBaseRequest
+# from openai import OpenAI
 
+# Load environment variables from .env file
 load_dotenv()
 
 st.set_page_config(page_title="Annotation and Emotion Marking", page_icon="📝", layout="wide")
@@ -477,8 +484,9 @@ def parse_hume_predictions(job_predictions):
         text = pred['text']
         time_str = f"{pred['begin']:.1f}s-{pred['end']:.1f}s"
         
+        # Get top emotion only
         pred['emotions'].sort(key=lambda x: x[1], reverse=True)
-        top_emotions = pred['emotions'][:3]
+        top_emotions = pred['emotions'][:1]
         emotions_text = ", ".join([f"{name} ({score:.0%})" for name, score in top_emotions])
         
         if len(text) > 52:
@@ -698,18 +706,29 @@ if st.session_state.current_page == 'annotation':
     conversation_audio = st.file_uploader("Upload conversation.wav file", type=['wav', 'm4a', 'mp3'], key="annotation_audio")
     transcript_file = st.file_uploader("Upload final_transcript.txt file", type=['txt'], key="annotation_transcript")
     
+    # Language selector
+    transcript_language = st.selectbox(
+        "Select transcript language/format:",
+        ["English/Spanish (with emotions)", "Arabic (tab-separated)"],
+        key="transcript_language"
+    )
+    
     if conversation_audio and transcript_file:
         transcript_text = transcript_file.read().decode('utf-8')
         transcript_lines = transcript_text.strip().split('\n')
         
         original_transcript_lines = [line.strip() for line in transcript_lines if line.strip()]
         
+        # Parse transcript entries based on language format
         transcript_entries = []
+        is_arabic_format = transcript_language == "Arabic (tab-separated)"
+        
         for line in transcript_lines:
             line = line.strip()
             if not line:
                 continue
             
+            # Extract timestamp - try both formats
             total_seconds = None
             end_seconds = None
             timestamp_format = None 
@@ -735,26 +754,56 @@ if st.session_state.current_page == 'annotation':
             speaker_match = re.search(r'Speaker \d+', line)
             speaker = speaker_match.group(0) if speaker_match else "Unknown"
             
-            text_start = line.find(':', line.find(speaker))
-            if text_start == -1:
-                continue
-            
-            text_part = line[text_start + 1:].strip()
-            intensity = 3 
-            intensity_match = re.search(r'\[Intensity:\s*(\d+)\]|Intensity:\s*(\d+)', text_part, re.IGNORECASE)
-            if intensity_match:
-                intensity = int(intensity_match.group(1) or intensity_match.group(2))
-                text_part = re.sub(r'\[Intensity:\s*\d+\]|Intensity:\s*\d+', '', text_part, flags=re.IGNORECASE).strip()
-            
-            emotion_match = re.search(r'\s*\(Emotion:.*?\)\s*$', text_part)
-            emotion_part = ""
-            emotions_list = []
-            if emotion_match:
-                emotion_part = emotion_match.group(0).strip()
-                text_part = text_part[:emotion_match.start()].strip()
-                emotion_content = emotion_part.replace('(Emotion:', '').replace(')', '').strip()
-                if emotion_content:
-                    emotions_list = [e.strip() for e in emotion_content.split(',') if e.strip()]
+            # Parse based on format
+            if is_arabic_format:
+                # Arabic format: [start,end]	Speaker X	text (tab-separated)
+                # Split by tabs
+                parts = line.split('\t')
+                if len(parts) >= 3:
+                    # parts[0] = timestamp (already extracted)
+                    # parts[1] = speaker (already extracted)
+                    # parts[2:] = text (may contain tabs)
+                    text_part = '\t'.join(parts[2:]).strip()
+                    emotion_part = ""
+                    emotions_list = []
+                    intensity = 3  # Default intensity for Arabic format
+                else:
+                    # Fallback: try to extract text after speaker (no colon)
+                    speaker_end = line.find(speaker) + len(speaker)
+                    text_part = line[speaker_end:].strip()
+                    # Remove leading/trailing whitespace and tabs
+                    text_part = text_part.lstrip('\t').strip()
+                    emotion_part = ""
+                    emotions_list = []
+                    intensity = 3
+            else:
+                # English/Spanish format: [start,end] Speaker X: text (Emotion: ...)
+                # Extract text (everything after speaker, before emotion if present)
+                text_start = line.find(':', line.find(speaker))
+                if text_start == -1:
+                    continue
+                
+                text_part = line[text_start + 1:].strip()
+                # Extract intensity if present (format: [Intensity: X] or Intensity: X)
+                intensity = 3  # Default intensity
+                intensity_match = re.search(r'\[Intensity:\s*(\d+)\]|Intensity:\s*(\d+)', text_part, re.IGNORECASE)
+                if intensity_match:
+                    intensity = int(intensity_match.group(1) or intensity_match.group(2))
+                    # Remove intensity from text_part
+                    text_part = re.sub(r'\[Intensity:\s*\d+\]|Intensity:\s*\d+', '', text_part, flags=re.IGNORECASE).strip()
+                
+                # Extract emotion part if present
+                emotion_match = re.search(r'\s*\(Emotion:.*?\)\s*$', text_part)
+                emotion_part = ""
+                emotions_list = []
+                if emotion_match:
+                    emotion_part = emotion_match.group(0).strip()
+                    text_part = text_part[:emotion_match.start()].strip()
+                    # Extract individual emotions from format: (Emotion: Emotion1, Emotion2)
+                    emotion_content = emotion_part.replace('(Emotion:', '').replace(')', '').strip()
+                    if emotion_content:
+                        # Split by comma and clean up
+                        emotions_list = [e.strip() for e in emotion_content.split(',') if e.strip()]
             
             original_line = line
             
@@ -768,7 +817,8 @@ if st.session_state.current_page == 'annotation':
                 'emotions': emotions_list, 
                 'intensity': intensity, 
                 'original_line': original_line,
-                'index': len(transcript_entries)  
+                'index': len(transcript_entries),  # Store index for matching with original lines
+                'is_arabic_format': is_arabic_format  # Store format type for saving
             })
         
         transcript_entries.sort(key=lambda x: x['time'])
@@ -784,6 +834,10 @@ if st.session_state.current_page == 'annotation':
             
             transcript_json = json.dumps(transcript_entries)
             
+            # Determine format type (check first entry if available)
+            is_arabic_format_js = transcript_entries[0].get('is_arabic_format', False) if transcript_entries else False
+            
+            # Store original transcript format in session state for saving
             if 'original_transcript_data' not in st.session_state:
                 st.session_state.original_transcript_data = {
                     'entries': transcript_entries,
@@ -798,7 +852,7 @@ if st.session_state.current_page == 'annotation':
             <head>
                 <style>
                     body {{
-                        font-family: Arial, sans-serif;
+                        font-family: Arial, "Arial Unicode MS", "Segoe UI", Tahoma, sans-serif;
                         padding: 20px;
                         background-color: #0e1117;
                         color: #fafafa;
@@ -960,6 +1014,33 @@ if st.session_state.current_page == 'annotation':
                         color: #fafafa;
                         padding: 4px;
                         border-radius: 3px;
+                    }}
+                    .transcript-text-part.rtl {{
+                        direction: rtl;
+                        text-align: right;
+                        font-family: "Arial Unicode MS", "Segoe UI", Tahoma, "Arabic Typesetting", "Traditional Arabic", Arial, sans-serif;
+                        unicode-bidi: embed;
+                        font-size: 20px;
+                        line-height: 1.8;
+                    }}
+                    .transcript-text-part.rtl[contenteditable="true"] {{
+                        unicode-bidi: plaintext;
+                    }}
+                    .transcript-line.rtl {{
+                        direction: rtl;
+                        text-align: right;
+                    }}
+                    .transcript-line-content.rtl {{
+                        direction: rtl;
+                        flex-direction: row-reverse;
+                    }}
+                    .transcript-lines[dir="rtl"] {{
+                        direction: rtl;
+                        text-align: right;
+                    }}
+                    .transcript-display[dir="rtl"] {{
+                        direction: rtl;
+                        text-align: right;
                     }}
                     .emotions-container {{
                         display: flex;
@@ -1229,6 +1310,7 @@ if st.session_state.current_page == 'annotation':
                 
                 <script>
                     const transcriptData = {transcript_json};
+                    const isArabicFormat = {str(is_arabic_format_js).lower()};
                     const audio = document.getElementById('audioPlayer');
                     let currentEntryIndex = 0;
                     let updateInterval = null;
@@ -1257,6 +1339,18 @@ if st.session_state.current_page == 'annotation':
                     // Set default playback speed to 0.75x
                     audio.playbackRate = 0.75;
                     document.getElementById('speedButton').textContent = '0.75x Speed';
+                    
+                    // Set RTL direction for Arabic format
+                    if (isArabicFormat) {{
+                        const transcriptDisplay = document.getElementById('transcriptDisplay');
+                        const transcriptLines = document.getElementById('transcriptLines');
+                        if (transcriptDisplay) {{
+                            transcriptDisplay.setAttribute('dir', 'rtl');
+                        }}
+                        if (transcriptLines) {{
+                            transcriptLines.setAttribute('dir', 'rtl');
+                        }}
+                    }}
                     
                     // Initialize emotion modal options
                     function initializeEmotionModal() {{
@@ -1443,15 +1537,31 @@ if st.session_state.current_page == 'annotation':
                                 // Create line element
                                 const lineDiv = document.createElement('div');
                                 lineDiv.className = 'transcript-line' + (isCurrent ? ' current' : '');
+                                if (isArabicFormat) {{
+                                    lineDiv.classList.add('rtl');
+                                    lineDiv.setAttribute('dir', 'rtl');
+                                }}
                                 lineDiv.setAttribute('data-index', i);
                                 
                                 // Create content container
                                 const contentDiv = document.createElement('div');
                                 contentDiv.className = 'transcript-line-content';
+                                if (isArabicFormat) {{
+                                    contentDiv.classList.add('rtl');
+                                    contentDiv.setAttribute('dir', 'rtl');
+                                }}
                                 
                                 // Create text part
                                 const textPart = document.createElement('div');
                                 textPart.className = 'transcript-text-part';
+                                
+                                // Apply RTL styling for Arabic format
+                                if (isArabicFormat) {{
+                                    textPart.classList.add('rtl');
+                                    textPart.setAttribute('dir', 'rtl');
+                                }} else {{
+                                    textPart.setAttribute('dir', 'ltr');
+                                }}
                                 
                                 if (isCurrent) {{
                                     // Make current line editable
@@ -1478,84 +1588,93 @@ if st.session_state.current_page == 'annotation':
                                     }});
                                 }}
                                 
-                                textPart.textContent = entry.speaker + ': ' + displayText;
-                                
-                                // Create emotions container
-                                const emotionsContainer = document.createElement('div');
-                                emotionsContainer.className = 'emotions-container';
-                                // Prevent clicks on emotion container from triggering text editing
-                                emotionsContainer.addEventListener('click', function(e) {{
-                                    e.stopPropagation();
-                                }});
-                                
-                                // Add emotion boxes
-                                entryEmotions.forEach(emotion => {{
-                                    const emotionBox = document.createElement('div');
-                                    emotionBox.className = 'emotion-box';
-                                    
-                                    const emotionText = document.createElement('span');
-                                    emotionText.textContent = emotion;
-                                    
-                                    const removeBtn = document.createElement('button');
-                                    removeBtn.className = 'emotion-remove';
-                                    removeBtn.textContent = '×';
-                                    removeBtn.type = 'button'; // Prevent form submission
-                                    removeBtn.addEventListener('click', function(e) {{
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        removeEmotion(i, emotion);
-                                    }});
-                                    
-                                    emotionBox.appendChild(emotionText);
-                                    emotionBox.appendChild(removeBtn);
-                                    emotionsContainer.appendChild(emotionBox);
-                                }});
-                                
-                                // Add + button to add emotions
-                                const addEmotionBtn = document.createElement('button');
-                                addEmotionBtn.className = 'add-emotion-btn';
-                                addEmotionBtn.textContent = '+';
-                                addEmotionBtn.type = 'button'; // Prevent form submission
-                                addEmotionBtn.addEventListener('click', function(e) {{
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    openEmotionModal(i);
-                                }});
-                                emotionsContainer.appendChild(addEmotionBtn);
-                                
-                                // Create intensity container
-                                const intensityContainer = document.createElement('div');
-                                intensityContainer.className = 'intensity-container';
-                                // Prevent clicks on intensity container from triggering text editing
-                                intensityContainer.addEventListener('click', function(e) {{
-                                    e.stopPropagation();
-                                }});
-                                
-                                // Get intensity for this entry (use edited if available, otherwise original)
-                                let entryIntensity = editedIntensities[i];
-                                if (entryIntensity === undefined) {{
-                                    entryIntensity = entry.intensity !== undefined ? entry.intensity : 3;
-                                }}
-                                
-                                // Create intensity buttons (1-5)
-                                for (let intensity = 1; intensity <= 5; intensity++) {{
-                                    const intensityBtn = document.createElement('button');
-                                    intensityBtn.className = 'intensity-button' + (entryIntensity === intensity ? ' selected' : '');
-                                    intensityBtn.textContent = intensity;
-                                    intensityBtn.type = 'button';
-                                    intensityBtn.setAttribute('data-intensity', intensity);
-                                    intensityBtn.addEventListener('click', function(e) {{
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setIntensity(i, intensity);
-                                    }});
-                                    intensityContainer.appendChild(intensityBtn);
+                                // For Arabic format, show with space for readability (but save with tabs)
+                                if (isArabicFormat) {{
+                                    textPart.textContent = entry.speaker + ' ' + displayText;
+                                }} else {{
+                                    textPart.textContent = entry.speaker + ': ' + displayText;
                                 }}
                                 
                                 // Assemble the line
                                 contentDiv.appendChild(textPart);
-                                contentDiv.appendChild(emotionsContainer);
-                                contentDiv.appendChild(intensityContainer);
+                                
+                                // Only show emotions and intensity for non-Arabic format
+                                if (!isArabicFormat) {{
+                                    // Create emotions container
+                                    const emotionsContainer = document.createElement('div');
+                                    emotionsContainer.className = 'emotions-container';
+                                    // Prevent clicks on emotion container from triggering text editing
+                                    emotionsContainer.addEventListener('click', function(e) {{
+                                        e.stopPropagation();
+                                    }});
+                                    
+                                    // Add emotion boxes
+                                    entryEmotions.forEach(emotion => {{
+                                        const emotionBox = document.createElement('div');
+                                        emotionBox.className = 'emotion-box';
+                                        
+                                        const emotionText = document.createElement('span');
+                                        emotionText.textContent = emotion;
+                                        
+                                        const removeBtn = document.createElement('button');
+                                        removeBtn.className = 'emotion-remove';
+                                        removeBtn.textContent = '×';
+                                        removeBtn.type = 'button'; // Prevent form submission
+                                        removeBtn.addEventListener('click', function(e) {{
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            removeEmotion(i, emotion);
+                                        }});
+                                        
+                                        emotionBox.appendChild(emotionText);
+                                        emotionBox.appendChild(removeBtn);
+                                        emotionsContainer.appendChild(emotionBox);
+                                    }});
+                                    
+                                    // Add + button to add emotions
+                                    const addEmotionBtn = document.createElement('button');
+                                    addEmotionBtn.className = 'add-emotion-btn';
+                                    addEmotionBtn.textContent = '+';
+                                    addEmotionBtn.type = 'button'; // Prevent form submission
+                                    addEmotionBtn.addEventListener('click', function(e) {{
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        openEmotionModal(i);
+                                    }});
+                                    emotionsContainer.appendChild(addEmotionBtn);
+                                    
+                                    // Create intensity container
+                                    const intensityContainer = document.createElement('div');
+                                    intensityContainer.className = 'intensity-container';
+                                    // Prevent clicks on intensity container from triggering text editing
+                                    intensityContainer.addEventListener('click', function(e) {{
+                                        e.stopPropagation();
+                                    }});
+                                    
+                                    // Get intensity for this entry (use edited if available, otherwise original)
+                                    let entryIntensity = editedIntensities[i];
+                                    if (entryIntensity === undefined) {{
+                                        entryIntensity = entry.intensity !== undefined ? entry.intensity : 3;
+                                    }}
+                                    
+                                    // Create intensity buttons (1-5)
+                                    for (let intensity = 1; intensity <= 5; intensity++) {{
+                                        const intensityBtn = document.createElement('button');
+                                        intensityBtn.className = 'intensity-button' + (entryIntensity === intensity ? ' selected' : '');
+                                        intensityBtn.textContent = intensity;
+                                        intensityBtn.type = 'button';
+                                        intensityBtn.setAttribute('data-intensity', intensity);
+                                        intensityBtn.addEventListener('click', function(e) {{
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setIntensity(i, intensity);
+                                        }});
+                                        intensityContainer.appendChild(intensityBtn);
+                                    }}
+                                    
+                                    contentDiv.appendChild(emotionsContainer);
+                                    contentDiv.appendChild(intensityContainer);
+                                }}
                                 lineDiv.appendChild(contentDiv);
                                 
                                 transcriptLinesContainer.appendChild(lineDiv);
@@ -1607,12 +1726,54 @@ if st.session_state.current_page == 'annotation':
                                 const lineIndex = parseInt(lineDiv.getAttribute('data-index'));
                                 if (lineIndex === entryIndex) {{
                                     const editedText = textPart.textContent.trim();
-                                    // Remove speaker prefix if present
-                                    const speakerPrefix = transcriptData[entryIndex].speaker + ': ';
-                                    const cleanText = editedText.startsWith(speakerPrefix) 
-                                        ? editedText.substring(speakerPrefix.length) 
-                                        : editedText;
+                                    let cleanText = editedText;
+                                    let newSpeaker = null;
                                     
+                                    // Try to detect and extract speaker from the edited text
+                                    // Pattern: "Speaker X" or "Speaker X:" (case-insensitive, flexible spacing)
+                                    const speakerMatch = editedText.match(/^(Speaker\s+\d+)(?:\s*:?\s*)(.*)$/i);
+                                    
+                                    if (speakerMatch) {{
+                                        // User included a speaker in the text
+                                        // Normalize speaker format: "Speaker X" (capitalize first letter, ensure space)
+                                        const detectedSpeakerRaw = speakerMatch[1];
+                                        const speakerNumMatch = detectedSpeakerRaw.match(/\d+/);
+                                        const normalizedSpeaker = speakerNumMatch ? `Speaker ${{speakerNumMatch[0]}}` : detectedSpeakerRaw;
+                                        const textAfterSpeaker = speakerMatch[2].trim();
+                                        
+                                        // Check if speaker was changed
+                                        if (normalizedSpeaker !== transcriptData[entryIndex].speaker) {{
+                                            newSpeaker = normalizedSpeaker;
+                                            cleanText = textAfterSpeaker;
+                                        }} else {{
+                                            // Same speaker, just extract text
+                                            cleanText = textAfterSpeaker;
+                                        }}
+                                    }} else {{
+                                        // No speaker pattern detected, try to remove original speaker prefix
+                                        if (isArabicFormat) {{
+                                            // Arabic format: "Speaker X text"
+                                            const speakerPrefix = transcriptData[entryIndex].speaker + ' ';
+                                            if (editedText.startsWith(speakerPrefix)) {{
+                                                cleanText = editedText.substring(speakerPrefix.length);
+                                            }}
+                                        }} else {{
+                                            // English/Spanish format: "Speaker X: text"
+                                            const speakerPrefix = transcriptData[entryIndex].speaker + ': ';
+                                            if (editedText.startsWith(speakerPrefix)) {{
+                                                cleanText = editedText.substring(speakerPrefix.length);
+                                            }}
+                                        }}
+                                    }}
+                                    
+                                    // Update speaker if changed
+                                    if (newSpeaker) {{
+                                        transcriptData[entryIndex].speaker = newSpeaker;
+                                        // Force update display to show new speaker immediately
+                                        updateTranscript(true);
+                                    }}
+                                    
+                                    // Save edited text
                                     if (cleanText && cleanText !== transcriptData[entryIndex].text) {{
                                         editedEntries[entryIndex] = cleanText;
                                     }}
@@ -1801,18 +1962,6 @@ if st.session_state.current_page == 'annotation':
                             const entry = transcriptData[i];
                             const editedText = editedEntries[i] || entry.text;
                             
-                            // Get emotions (use edited if available, otherwise original)
-                            let entryEmotions = editedEmotions[i];
-                            if (entryEmotions === undefined) {{
-                                entryEmotions = entry.emotions || [];
-                            }}
-                            
-                            // Get intensity (use edited if available, otherwise original, default 3)
-                            let entryIntensity = editedIntensities[i];
-                            if (entryIntensity === undefined) {{
-                                entryIntensity = entry.intensity !== undefined ? entry.intensity : 3;
-                            }}
-                            
                             // Reconstruct the line in original format
                             let timestamp;
                             if (entry.timestamp_format === 'range_format') {{
@@ -1823,16 +1972,35 @@ if st.session_state.current_page == 'annotation':
                                 timestamp = formatTimeForLine(entry.time);
                             }}
                             
-                            // Format intensity as [Intensity: X]
-                            let intensityPart = ` [Intensity: ${{entryIntensity}}]`;
-                            
-                            // Format emotions as (Emotion: Emotion1, Emotion2) or empty string
-                            let emotionPart = '';
-                            if (entryEmotions.length > 0) {{
-                                emotionPart = ' (Emotion: ' + entryEmotions.join(', ') + ')';
+                            let line;
+                            if (isArabicFormat) {{
+                                // Arabic format: [start,end]	Speaker X	text (tab-separated)
+                                line = `[${{timestamp}}]\\t${{entry.speaker}}\\t${{editedText}}`;
+                            }} else {{
+                                // English/Spanish format: [start,end] Speaker X: text (Emotion: ...) [Intensity: X]
+                                // Get emotions (use edited if available, otherwise original)
+                                let entryEmotions = editedEmotions[i];
+                                if (entryEmotions === undefined) {{
+                                    entryEmotions = entry.emotions || [];
+                                }}
+                                
+                                // Get intensity (use edited if available, otherwise original, default 3)
+                                let entryIntensity = editedIntensities[i];
+                                if (entryIntensity === undefined) {{
+                                    entryIntensity = entry.intensity !== undefined ? entry.intensity : 3;
+                                }}
+                                
+                                // Format intensity as [Intensity: X]
+                                let intensityPart = ` [Intensity: ${{entryIntensity}}]`;
+                                
+                                // Format emotions as (Emotion: Emotion1, Emotion2) or empty string
+                                let emotionPart = '';
+                                if (entryEmotions.length > 0) {{
+                                    emotionPart = ' (Emotion: ' + entryEmotions.join(', ') + ')';
+                                }}
+                                
+                                line = `[${{timestamp}}] ${{entry.speaker}}: ${{editedText}}${{intensityPart}}${{emotionPart}}`;
                             }}
-                            
-                            const line = `[${{timestamp}}] ${{entry.speaker}}: ${{editedText}}${{intensityPart}}${{emotionPart}}`;
                             
                             editedLines.push(line);
                         }}

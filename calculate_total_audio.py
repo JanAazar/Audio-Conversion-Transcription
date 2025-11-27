@@ -4,7 +4,7 @@ import soundfile as sf
 
 def get_total_audio_duration():
     """Calculate total duration of all conversation.wav files in Recording subfolders."""
-    recording_dir = Path("Recording")
+    recording_dir = Path("Recording/Italian")
     
     if not recording_dir.exists():
         print(f"Error: {recording_dir} directory not found!")

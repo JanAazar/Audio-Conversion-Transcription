@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-Script to merge audio files for a range of conversations.
+Script to merge audio files for a range of conversations and then clean up.
 Converts .m4a files to mono and merges them into stereo conversation.wav.
+Then deletes all files except first_speaker.wav, second_speaker.wav, and conversation.wav.
 """
 
 import os
 import soundfile as sf
 import librosa
 import numpy as np
-import sys
+import argparse
 from pathlib import Path
 
 def convert_to_mono(audio_file, target_sr=48000):
@@ -99,50 +100,97 @@ def process_audio(first_file, second_file, folder_path):
     
     return conversation_path
 
-def parse_range_args(default_start=63, default_end=73):
-    """Parse optional start and end arguments from command line."""
-    if len(sys.argv) == 1:
-        return default_start, default_end
-    if len(sys.argv) == 2:
-        try:
-            start = int(sys.argv[1])
-            return start, start
-        except ValueError:
-            raise ValueError("Start conversation number must be an integer")
-    if len(sys.argv) >= 3:
-        try:
-            start = int(sys.argv[1])
-            end = int(sys.argv[2])
-            if start > end:
-                raise ValueError("Start conversation number must be less than or equal to end number")
-            return start, end
-        except ValueError:
-            raise ValueError("Start and end conversation numbers must be integers")
-
+def cleanup_conversation_folder(folder_path):
+    """Delete all files in folder except the three specified .wav files."""
+    if not os.path.exists(folder_path):
+        print(f"  ⚠️  Folder does not exist: {folder_path}")
+        return False
+    
+    files_to_keep = {"first_speaker.wav", "second_speaker.wav", "conversation.wav"}
+    deleted_count = 0
+    
+    for item in os.listdir(folder_path):
+        item_path = os.path.join(folder_path, item)
+        
+        # Skip directories
+        if os.path.isdir(item_path):
+            continue
+        
+        # Delete if not in the keep list
+        if item not in files_to_keep:
+            try:
+                os.remove(item_path)
+                print(f"    🗑️  Deleted: {item}")
+                deleted_count += 1
+            except Exception as e:
+                print(f"    ❌ Error deleting {item}: {e}")
+                return False
+    
+    if deleted_count > 0:
+        print(f"  ✅ Cleaned up {folder_path} ({deleted_count} file(s) deleted)")
+    else:
+        print(f"  ℹ️  No files to delete in {folder_path}")
+    
+    return True
 
 def main():
-    """Main function to process a range of conversations."""
-    base_folder = "Recording"
+    """Main function to merge and then clean up a range of conversations."""
+    parser = argparse.ArgumentParser(
+        description="Merge audio files for conversations and then clean up folders by deleting all files except first_speaker.wav, second_speaker.wav, and conversation.wav"
+    )
+    parser.add_argument(
+        "start",
+        type=int,
+        help="Starting conversation number (e.g., 63)"
+    )
+    parser.add_argument(
+        "end",
+        type=int,
+        help="Ending conversation number (inclusive, e.g., 73)"
+    )
+    parser.add_argument(
+        "--exclude",
+        type=int,
+        nargs="+",
+        default=[],
+        help="Conversation numbers to exclude (e.g., --exclude 65 66)"
+    )
     
-    # Process conversations in provided range (defaults to 63-73)
-    start_num, end_num = parse_range_args()
+    args = parser.parse_args()
     
-    print(f"Merging conversations {start_num} to {end_num}...")
+    base_folder = "Recording/Spanish-Regular"
+    
+    # Conversations to process
+    conversation_numbers = list(range(args.start, args.end + 1))
+    
+    # Remove excluded conversations
+    for excluded in args.exclude:
+        if excluded in conversation_numbers:
+            conversation_numbers.remove(excluded)
+    
+    if not conversation_numbers:
+        print("No conversations to process after exclusions.")
+        return
+    
+    exclude_text = f" (excluding {', '.join(map(str, args.exclude))})" if args.exclude else ""
+    
+    # ========== STEP 1: MERGE AUDIO FILES ==========
+    print(f"Merging conversations: {conversation_numbers[0]} to {conversation_numbers[-1]}{exclude_text}")
     print("=" * 60)
     
-    successful = 0
-    skipped = 0
-    failed = 0
+    merge_successful = 0
+    merge_skipped = 0
+    merge_failed = 0
     
-    for conv_num in range(start_num, end_num + 1):
+    for conv_num in conversation_numbers:
         folder_name = f"Conversation_{conv_num}"
         folder_path = os.path.join(base_folder, folder_name)
         
-        print(f"\n[{conv_num}/{end_num}] Processing {folder_name}...")
+        print(f"\n[{conv_num}/{conversation_numbers[-1]}] Processing {folder_name}...")
         
         if not os.path.exists(folder_path):
             print(f"  ⚠️  Folder does not exist, skipping")
-            skipped += 1
+            merge_skipped += 1
             continue
         
         # Find .m4a files in the folder
@@ -150,7 +198,7 @@ def main():
         
         if len(m4a_files) < 2:
             print(f"  ⚠️  Found {len(m4a_files)} .m4a file(s), need 2. Skipping")
-            skipped += 1
+            merge_skipped += 1
             continue
         
         # Use first two .m4a files found
@@ -160,27 +208,58 @@ def main():
         # Check if conversation.wav already exists
         conversation_path = os.path.join(folder_path, "conversation.wav")
         if os.path.exists(conversation_path):
-            print(f"  ℹ️  conversation.wav already exists, skipping")
-            skipped += 1
-            continue
-        
-        try:
-            # Process and merge the audio files
-            result = process_audio(first_file, second_file, folder_path)
-            print(f"  ✅ Successfully merged {folder_name}")
-            successful += 1
-        except Exception as e:
-            print(f"  ❌ Error processing {folder_name}: {e}")
-            import traceback
-            traceback.print_exc()
-            failed += 1
+            print(f"  ℹ️  conversation.wav already exists, skipping merge")
+            merge_skipped += 1
+        else:
+            try:
+                # Process and merge the audio files
+                result = process_audio(first_file, second_file, folder_path)
+                print(f"  ✅ Successfully merged {folder_name}")
+                merge_successful += 1
+            except Exception as e:
+                print(f"  ❌ Error processing {folder_name}: {e}")
+                import traceback
+                traceback.print_exc()
+                merge_failed += 1
+                continue
     
     print("\n" + "=" * 60)
     print("Merge complete!")
-    print(f"  ✅ Successful: {successful}")
-    print(f"  ⏭️  Skipped: {skipped}")
-    print(f"  ❌ Failed: {failed}")
-    print(f"  📊 Total processed: {successful + skipped + failed}")
+    print(f"  ✅ Successful: {merge_successful}")
+    print(f"  ⏭️  Skipped: {merge_skipped}")
+    print(f"  ❌ Failed: {merge_failed}")
+    print(f"  📊 Total processed: {merge_successful + merge_skipped + merge_failed}")
+    
+    # ========== STEP 2: CLEANUP FOLDERS ==========
+    print("\n" + "=" * 60)
+    print(f"Cleaning up conversations: {conversation_numbers[0]} to {conversation_numbers[-1]}{exclude_text}")
+    print("=" * 60)
+    
+    cleanup_successful = 0
+    cleanup_failed = 0
+    
+    for conv_num in conversation_numbers:
+        folder_name = f"Conversation_{conv_num}"
+        folder_path = os.path.join(base_folder, folder_name)
+        
+        print(f"\n[{conv_num}] Cleaning up {folder_name}...")
+        
+        if cleanup_conversation_folder(folder_path):
+            cleanup_successful += 1
+        else:
+            cleanup_failed += 1
+    
+    print("\n" + "=" * 60)
+    print("Cleanup complete!")
+    print(f"  ✅ Successful: {cleanup_successful}")
+    print(f"  ❌ Failed: {cleanup_failed}")
+    print(f"  📊 Total processed: {cleanup_successful + cleanup_failed}")
+    
+    # ========== FINAL SUMMARY ==========
+    print("\n" + "=" * 60)
+    print("All operations complete!")
+    print(f"  Merge - ✅: {merge_successful}, ⏭️: {merge_skipped}, ❌: {merge_failed}")
+    print(f"  Cleanup - ✅: {cleanup_successful}, ❌: {cleanup_failed}")
 
 if __name__ == "__main__":
     main()
